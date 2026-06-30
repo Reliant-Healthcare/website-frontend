@@ -22,16 +22,30 @@ interface ContactMessage {
   email: string;
   phone?: string;
   subject?: string;
+  category?: string;
   message: string;
   isRead: boolean;
   createdAt: string;
 }
+
+const CATEGORY_LABELS: Record<string, string> = {
+  general_messages: "General Messages",
+  caregiver_questions: "Caregiver Questions",
+  applicant_questions: "Applicant Questions",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  general_messages: "bg-slate-100 text-slate-800 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400 dark:border-slate-800",
+  caregiver_questions: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30",
+  applicant_questions: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30",
+};
 
 export default function AdminContactsPage() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<ContactMessage | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   const { data: messages = [], isLoading } = useQuery<ContactMessage[]>({
     queryKey: ["admin-contacts"],
@@ -62,6 +76,8 @@ export default function AdminContactsPage() {
   const filtered = messages.filter((m) => {
     const matchesFilter =
       filter === "all" || (filter === "unread" && !m.isRead) || (filter === "read" && m.isRead);
+    const matchesCategory =
+      categoryFilter === "all" || (m.category || "general_messages") === categoryFilter;
     const q = search.toLowerCase();
     const matchesSearch =
       !q ||
@@ -69,7 +85,7 @@ export default function AdminContactsPage() {
       m.email.toLowerCase().includes(q) ||
       m.subject?.toLowerCase().includes(q) ||
       m.message.toLowerCase().includes(q);
-    return matchesFilter && matchesSearch;
+    return matchesFilter && matchesCategory && matchesSearch;
   });
 
   const unreadCount = messages.filter((m) => !m.isRead).length;
@@ -104,6 +120,17 @@ export default function AdminContactsPage() {
           />
         </div>
         <div className="flex gap-2">
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-primary font-medium"
+          >
+            <option value="all">All Categories</option>
+            <option value="general_messages">General Messages</option>
+            <option value="caregiver_questions">Caregiver Questions</option>
+            <option value="applicant_questions">Applicant Questions</option>
+          </select>
+
           {(["all", "unread", "read"] as const).map((f) => (
             <button
               key={f}
@@ -163,9 +190,16 @@ export default function AdminContactsPage() {
                     </span>
                   </div>
                   {msg.subject && (
-                    <p className="text-xs text-muted-foreground mt-1 ml-6 truncate">{msg.subject}</p>
+                    <p className="text-xs text-muted-foreground mt-1 ml-6 truncate font-medium">{msg.subject}</p>
                   )}
-                  <p className="text-xs text-muted-foreground mt-1 ml-6 line-clamp-2">{msg.message}</p>
+                  <div className="flex items-center gap-2 mt-1.5 ml-6 flex-wrap">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border ${
+                      CATEGORY_COLORS[msg.category || "general_messages"] || CATEGORY_COLORS.general_messages
+                    }`}>
+                      {CATEGORY_LABELS[msg.category || "general_messages"] || "General Messages"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1.5 ml-6 line-clamp-2">{msg.message}</p>
                 </button>
               ))}
             </div>
@@ -184,6 +218,13 @@ export default function AdminContactsPage() {
               {/* Detail Header */}
               <div className="flex items-start justify-between gap-4">
                 <div>
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                      CATEGORY_COLORS[selected.category || "general_messages"] || CATEGORY_COLORS.general_messages
+                    }`}>
+                      {CATEGORY_LABELS[selected.category || "general_messages"] || "General Messages"}
+                    </span>
+                  </div>
                   <h2 className="text-xl font-bold text-foreground">
                     {selected.firstName} {selected.lastName}
                   </h2>

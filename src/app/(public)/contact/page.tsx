@@ -12,6 +12,7 @@ export default function ContactPage() {
     email: "",
     phone: "",
     subject: "",
+    category: "general_messages",
     message: "",
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -33,7 +34,7 @@ export default function ContactPage() {
     try {
       await contactApi.submit(form);
       setStatus("success");
-      setForm({ firstName: "", lastName: "", email: "", phone: "", subject: "", message: "" });
+      setForm({ firstName: "", lastName: "", email: "", phone: "", subject: "", category: "general_messages", message: "" });
     } catch (err: any) {
       setStatus("error");
       setErrorMsg(err.message || "Something went wrong. Please try again.");
@@ -64,7 +65,7 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-foreground">Our Office</h3>
-                    <p className="text-foreground/60">123 Health Way, Suite 100<br />City, State 12345</p>
+                    <p className="text-foreground/60">1401 East MacDade Boulevard<br />Folsom, Pa 19033</p>
                   </div>
                 </div>
 
@@ -74,7 +75,17 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-foreground">Phone</h3>
-                    <p className="text-foreground/60">(123) 456-7890</p>
+                    <p className="text-foreground/60">610-534-1414</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 items-start">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground">Fax</h3>
+                    <p className="text-foreground/60">610-534-1433</p>
                   </div>
                 </div>
 
@@ -168,6 +179,23 @@ export default function ContactPage() {
                         placeholder="(555) 000-0000"
                         className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-foreground mb-1.5">
+                        Category <span className="text-destructive">*</span>
+                      </label>
+                      <select
+                        name="category"
+                        value={form.category}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm bg-white"
+                      >
+                        <option value="general_messages">General Messages / Inquiries</option>
+                        <option value="caregiver_questions">Caregiver Questions</option>
+                        <option value="applicant_questions">Applicant / Career Questions</option>
+                      </select>
                     </div>
 
                     <div>

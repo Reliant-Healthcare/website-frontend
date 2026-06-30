@@ -139,10 +139,10 @@ export default function Home() {
               Contact Us Now
             </Link>
             <Link
-              href="tel:+15551234567"
+              href="tel:6105341414"
               className="inline-flex h-12 items-center justify-center rounded-md border-2 border-primary-foreground px-8 text-sm font-bold text-primary-foreground shadow-sm transition-colors hover:bg-primary-foreground hover:text-primary"
             >
-              (555) 123-4567
+              610-534-1414
             </Link>
           </div>
         </div>
@@ -188,5 +188,11 @@ const services = [
     description: "Compassionate personal care from certified Home Health Aides, CNAs, and Direct Care Workers — bathing, grooming, mobility support, and daily living assistance at home.",
     icon: <Heart className="h-6 w-6" />,
     link: "/services/personal-care"
+  },
+  {
+    title: "Respite Care",
+    description: "Temporary relief for primary caregivers, allowing you to rest and recharge while we provide professional, compassionate care for your loved one.",
+    icon: <HeartPulse className="h-6 w-6" />,
+    link: "/services/respite-care"
   }
 ];

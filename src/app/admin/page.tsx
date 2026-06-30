@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, FileText, Activity, ArrowUpRight, Clock, Loader2, Calendar } from "lucide-react";
+import { Users, ArrowUpRight, Clock, Loader2, ShieldAlert, CheckCircle2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { applicationsApi } from "@/lib/api";
@@ -50,69 +50,81 @@ export default function AdminDashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Pending Applications Card */}
-        <div className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-primary/50 transition-colors">
+        {/* New Applications Card */}
+        <Link href="/admin/applications" className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-blue-500/50 hover:shadow-md transition-all group">
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary border">
-              <Users className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-900/30">
+              <UserPlus className="w-5 h-5" />
             </div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full dark:bg-blue-950/30 dark:text-blue-400">
+              Applied
+            </span>
+          </div>
+          <div className="mt-4">
+            <div className="text-3xl font-bold text-foreground flex items-baseline gap-2">
+              {stats.newApplications ?? 0}
+              <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <div className="text-sm font-semibold text-muted-foreground mt-0.5">New Applications</div>
+          </div>
+        </Link>
+        
+        {/* Pending Applications Card */}
+        <Link href="/admin/applications" className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-amber-500/50 hover:shadow-md transition-all group">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-900/30">
+              <Clock className="w-5 h-5" />
+            </div>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full dark:bg-amber-950/30 dark:text-amber-400">
               In Review
             </span>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold text-foreground">{stats.pendingApplications}</div>
+            <div className="text-3xl font-bold text-foreground flex items-baseline gap-2">
+              {stats.pendingApplications ?? 0}
+              <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
             <div className="text-sm font-semibold text-muted-foreground mt-0.5">Pending Applications</div>
           </div>
-        </div>
-        
-        {/* Total Registered Talent Card */}
-        <div className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-primary/50 transition-colors">
-          <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100">
-              <Activity className="w-5 h-5" />
-            </div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-              Talent Pool
-            </span>
-          </div>
-          <div className="mt-4">
-            <div className="text-3xl font-bold text-foreground">{stats.activeEmployees}</div>
-            <div className="text-sm font-semibold text-muted-foreground mt-0.5">Registered Candidates</div>
-          </div>
-        </div>
+        </Link>
 
-        {/* LMS completions Card */}
-        <div className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-primary/50 transition-colors">
+        {/* Ready for Orientation Card */}
+        <Link href="/admin/applications" className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-emerald-500/50 hover:shadow-md transition-all group">
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
-              <FileText className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30">
+              <CheckCircle2 className="w-5 h-5" />
             </div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-              Training
+            <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full dark:bg-emerald-950/30 dark:text-emerald-400">
+              Approved
             </span>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold text-foreground">{stats.lmsCompletions}</div>
-            <div className="text-sm font-semibold text-muted-foreground mt-0.5">LMS Course Completions</div>
+            <div className="text-3xl font-bold text-foreground flex items-baseline gap-2">
+              {stats.readyForOrientation ?? 0}
+              <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <div className="text-sm font-semibold text-muted-foreground mt-0.5">Ready for Orientation</div>
           </div>
-        </div>
+        </Link>
 
-        {/* Scheduled Interviews Card */}
-        <div className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-primary/50 transition-colors">
+        {/* Compliance Reminders Card */}
+        <Link href="/admin/compliance" className="bg-card border rounded-xl p-6 shadow-sm flex flex-col justify-between min-h-[140px] hover:border-rose-500/50 hover:shadow-md transition-all group">
           <div className="flex items-center justify-between">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 border border-purple-100">
-              <Clock className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center text-rose-600 border border-rose-100 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-900/30">
+              <ShieldAlert className="w-5 h-5" />
             </div>
-            <span className="text-[10px] uppercase font-bold tracking-wider text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
-              Interviews
+            <span className="text-[10px] uppercase font-bold tracking-wider text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full dark:bg-rose-950/30 dark:text-rose-400">
+              Reminders
             </span>
           </div>
           <div className="mt-4">
-            <div className="text-3xl font-bold text-foreground">{stats.interviewsScheduled}</div>
-            <div className="text-sm font-semibold text-muted-foreground mt-0.5">Interviews Scheduled</div>
+            <div className="text-3xl font-bold text-foreground flex items-baseline gap-2">
+              {stats.complianceReminders ?? 0}
+              <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <div className="text-sm font-semibold text-muted-foreground mt-0.5">Compliance Reminders</div>
           </div>
-        </div>
+        </Link>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">

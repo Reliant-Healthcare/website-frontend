@@ -113,10 +113,10 @@ export default function OccupationalTherapyPage() {
               Request a Consultation <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
             <Link
-              href="tel:+15551234567"
+              href="tel:6105341414"
               className="inline-flex items-center justify-center h-12 px-8 rounded-md border-2 border-primary-foreground text-primary-foreground font-bold text-sm hover:bg-primary-foreground hover:text-primary transition-colors"
             >
-              <Phone className="mr-2 h-4 w-4" /> (555) 123-4567
+              <Phone className="mr-2 h-4 w-4" /> 610-534-1414
             </Link>
           </div>
           <div className="mt-10">

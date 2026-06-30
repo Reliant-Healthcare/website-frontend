@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Search, Briefcase, MapPin, Clock, ArrowRight, Loader2, AlertCircle } from "lucide-react";
+import { Search, Briefcase, MapPin, Clock, ArrowRight, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { jobsApi } from "@/lib/api";
 
 const DEPARTMENTS = ["All Departments", "Skilled Nursing", "Therapy", "Caregiving", "Social Services", "Administration"];
@@ -27,6 +27,7 @@ export default function CareersPage() {
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("All Departments");
   const [jobType, setJobType] = useState("All Types");
+  const [locationFilter, setLocationFilter] = useState("All Locations");
 
   const fetchJobs = useCallback(async () => {
     setIsLoading(true);
@@ -58,9 +59,15 @@ export default function CareersPage() {
     setSearch("");
     setDepartment("All Departments");
     setJobType("All Types");
+    setLocationFilter("All Locations");
   };
 
-  const hasFilters = search || department !== "All Departments" || jobType !== "All Types";
+  const hasFilters = search || department !== "All Departments" || jobType !== "All Types" || locationFilter !== "All Locations";
+
+  const filteredJobs = jobs.filter((job) => {
+    if (locationFilter === "All Locations") return true;
+    return job.location.toLowerCase() === locationFilter.toLowerCase();
+  });
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -93,6 +100,33 @@ export default function CareersPage() {
         </div>
       </section>
 
+      {/* Perks / Benefits */}
+      <section className="py-16 bg-secondary/30 border-y">
+        <div className="container mx-auto px-4 max-w-5xl">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-bold mb-4">Why Join Our Team?</h2>
+            <p className="text-muted-foreground text-lg">We value our caregivers and offer industry-leading benefits to support you and your family.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="bg-card p-6 rounded-xl border shadow-sm flex flex-col items-center text-center">
+              <CheckCircle2 className="w-10 h-10 text-primary mb-4" />
+              <h3 className="font-bold text-lg mb-2">Top Compensation</h3>
+              <p className="text-muted-foreground text-sm">Highest paying agency for Nurses, HHAs, and DCWs in the area.</p>
+            </div>
+            <div className="bg-card p-6 rounded-xl border shadow-sm flex flex-col items-center text-center">
+              <CheckCircle2 className="w-10 h-10 text-primary mb-4" />
+              <h3 className="font-bold text-lg mb-2">Health Insurance</h3>
+              <p className="text-muted-foreground text-sm">We offer comprehensive health insurance coverage for all eligible aides and nurses.</p>
+            </div>
+            <div className="bg-card p-6 rounded-xl border shadow-sm flex flex-col items-center text-center">
+              <CheckCircle2 className="w-10 h-10 text-primary mb-4" />
+              <h3 className="font-bold text-lg mb-2">Overtime Pay</h3>
+              <p className="text-muted-foreground text-sm">We value your hard work and pay overtime for those who go above and beyond.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Listings */}
       <section className="py-20 bg-background">
         <div className="container mx-auto px-4 max-w-5xl">
@@ -103,7 +137,7 @@ export default function CareersPage() {
               <h2 className="text-3xl font-bold">Open Positions</h2>
               {!isLoading && (
                 <p className="text-muted-foreground text-sm mt-1">
-                  {jobs.length} {jobs.length === 1 ? "position" : "positions"} found
+                  {filteredJobs.length} {filteredJobs.length === 1 ? "position" : "positions"} found
                   {hasFilters && " · "}
                   {hasFilters && (
                     <button onClick={clearFilters} className="text-primary hover:underline">
@@ -114,6 +148,15 @@ export default function CareersPage() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
+              <select
+                value={locationFilter}
+                onChange={(e) => setLocationFilter(e.target.value)}
+                className="border rounded-md px-3 py-1.5 text-sm bg-background focus:outline-primary font-semibold"
+              >
+                {["All Locations", "Delaware County", "Philadelphia"].map((l) => (
+                  <option key={l}>{l}</option>
+                ))}
+              </select>
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
@@ -158,7 +201,7 @@ export default function CareersPage() {
             </div>
           )}
 
-          {!isLoading && !error && jobs.length === 0 && (
+          {!isLoading && !error && filteredJobs.length === 0 && (
             <div className="text-center py-20 bg-secondary/20 rounded-2xl border border-border">
               <Briefcase className="w-14 h-14 text-muted-foreground mx-auto mb-4 opacity-40" />
               <h3 className="text-xl font-semibold mb-2">No positions found</h3>
@@ -178,9 +221,9 @@ export default function CareersPage() {
             </div>
           )}
 
-          {!isLoading && !error && jobs.length > 0 && (
+          {!isLoading && !error && filteredJobs.length > 0 && (
             <div className="space-y-4">
-              {jobs.map((job) => (
+              {filteredJobs.map((job) => (
                 <div
                   key={job.id}
                   className="group border rounded-xl p-6 hover:shadow-md transition-all hover:border-primary/50 bg-card flex flex-col md:flex-row md:items-center justify-between gap-6"

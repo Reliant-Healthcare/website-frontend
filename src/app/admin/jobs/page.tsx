@@ -43,6 +43,11 @@ export default function JobsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Job | null>(null);
   const [formData, setFormData] = useState(emptyForm);
 
+  const [selectedTitle, setSelectedTitle] = useState("CNA");
+  const [customTitle, setCustomTitle] = useState("");
+  const [selectedLocation, setSelectedLocation] = useState("Delaware County");
+  const [customLocation, setCustomLocation] = useState("");
+
   // ── Queries ──────────────────────────────────────────────────────────────
 
   const { data: jobs = [], isLoading } = useQuery<Job[]>({
@@ -79,12 +84,28 @@ export default function JobsPage() {
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   const openCreate = () => {
-    setFormData(emptyForm);
+    setSelectedTitle("CNA");
+    setCustomTitle("");
+    setSelectedLocation("Delaware County");
+    setCustomLocation("");
+    setFormData({
+      ...emptyForm,
+      title: "CNA",
+      location: "Delaware County",
+    });
     setEditingJob(null);
     setModalMode("create");
   };
 
   const openEdit = (job: Job) => {
+    const isStandardTitle = ["CNA", "HHA", "RN", "LPN"].includes(job.title);
+    const isStandardLocation = ["Delaware County", "Philadelphia"].includes(job.location);
+
+    setSelectedTitle(isStandardTitle ? job.title : "Other");
+    setCustomTitle(isStandardTitle ? "" : job.title);
+    setSelectedLocation(isStandardLocation ? job.location : "Other");
+    setCustomLocation(isStandardLocation ? "" : job.location);
+
     setFormData({
       title: job.title,
       department: job.department,
@@ -102,6 +123,10 @@ export default function JobsPage() {
     setModalMode(null);
     setEditingJob(null);
     setFormData(emptyForm);
+    setSelectedTitle("CNA");
+    setCustomTitle("");
+    setSelectedLocation("Delaware County");
+    setCustomLocation("");
   };
 
   const handleSubmit = () => {
@@ -266,15 +291,44 @@ export default function JobsPage() {
 
             <div className="p-6 space-y-5 overflow-y-auto flex-1">
               {/* Title */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Job Title *</label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="e.g. Registered Nurse (RN)"
-                />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Job Title *</label>
+                  <select
+                    value={selectedTitle}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedTitle(val);
+                      if (val !== "Other") {
+                        setFormData({ ...formData, title: val });
+                      } else {
+                        setFormData({ ...formData, title: customTitle });
+                      }
+                    }}
+                    className="w-full border rounded-lg px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    {["CNA", "HHA", "RN", "LPN", "Other"].map((role) => (
+                      <option key={role} value={role}>{role === "Other" ? "Other (Specify Custom...)" : role}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedTitle === "Other" && (
+                  <div className="space-y-1.5 pl-4 border-l-2 border-primary/30">
+                    <label className="text-xs font-semibold text-muted-foreground">Specify Custom Job Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={customTitle}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomTitle(val);
+                        setFormData({ ...formData, title: val });
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. Physical Therapist (PT)"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -304,15 +358,44 @@ export default function JobsPage() {
               </div>
 
               {/* Location */}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium">Location *</label>
-                <input
-                  type="text"
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="e.g. Cityville, ST or Remote"
-                />
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Location *</label>
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedLocation(val);
+                      if (val !== "Other") {
+                        setFormData({ ...formData, location: val });
+                      } else {
+                        setFormData({ ...formData, location: customLocation });
+                      }
+                    }}
+                    className="w-full border rounded-lg px-3 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    {["Delaware County", "Philadelphia", "Other"].map((loc) => (
+                      <option key={loc} value={loc}>{loc === "Other" ? "Other (Specify Custom...)" : loc}</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedLocation === "Other" && (
+                  <div className="space-y-1.5 pl-4 border-l-2 border-primary/30">
+                    <label className="text-xs font-semibold text-muted-foreground">Specify Custom Location *</label>
+                    <input
+                      type="text"
+                      required
+                      value={customLocation}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomLocation(val);
+                        setFormData({ ...formData, location: val });
+                      }}
+                      className="w-full border rounded-lg px-3 py-2 bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                      placeholder="e.g. Montgomery County, PA"
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Description */}

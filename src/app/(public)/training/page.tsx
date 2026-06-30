@@ -8,7 +8,7 @@ export default function TrainingPortal() {
         <div className="absolute inset-0 bg-[url('/images/training_banner.png')] bg-cover bg-center opacity-10 mix-blend-overlay" />
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-3xl">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">Reliant Learning Center</h1>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">Reliant Home Health Agency Inc's Learning Center</h1>
             <p className="text-xl text-primary-foreground/90 mb-10 leading-relaxed">
               Empowering healthcare professionals with state-of-the-art training, continuing education, and certification programs.
             </p>

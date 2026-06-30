@@ -131,10 +131,15 @@ export const applicationsApi = {
       body: JSON.stringify({ formData }),
     }),
 
-  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string) =>
+  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string) =>
     apiFetch(`/applications/documents/${docId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, adminNotes }),
+      body: JSON.stringify({ status, adminNotes, expirationDate }),
+    }),
+
+  sendDocumentExpirationReminder: (docId: string) =>
+    apiFetch(`/applications/documents/${docId}/reminder`, {
+      method: 'POST',
     }),
 };
 
@@ -326,6 +331,7 @@ export const contactApi = {
     email: string;
     phone?: string;
     subject?: string;
+    category?: string;
     message: string;
   }) => apiFetch('/contact', { method: 'POST', body: JSON.stringify(data) }),
 
