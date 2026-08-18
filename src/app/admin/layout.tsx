@@ -157,6 +157,7 @@ export default function AdminLayout({
                 src="/reliant-logo.png" 
                 alt="Reliant Home Health Agency" 
                 fill
+                sizes="144px"
                 className="object-contain"
                 priority
               />

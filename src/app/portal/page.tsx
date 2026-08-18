@@ -248,9 +248,20 @@ export default function PortalPage() {
                         <div key={course.id} className="bg-card border rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between">
                           <div className="p-5">
                             <div className="flex justify-between items-start mb-3">
-                              <span className="bg-primary/10 text-primary text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                                {course.category}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="bg-primary/10 text-primary text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                  {course.category}
+                                </span>
+                                {course.isRequired ? (
+                                  <span className="bg-rose-50 border border-rose-100 text-rose-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Required
+                                  </span>
+                                ) : (
+                                  <span className="bg-muted border border-border text-muted-foreground text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Optional
+                                  </span>
+                                )}
+                              </div>
                               {isCompleted ? (
                                 <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                                   <Check className="w-3 h-3" /> Completed
@@ -425,6 +436,10 @@ function LMSPlayerModal({
   onViewCertificate: (cert: any) => void;
 }) {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<"content" | "quiz" | "final-exam">("content");
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [quizResult, setQuizResult] = useState<any | null>(null);
+  const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
   const { data: courseDetails, isLoading } = useQuery({
     queryKey: ["portal-course-details", courseId],
@@ -456,13 +471,59 @@ function LMSPlayerModal({
 
   // Handle auto-selection of first lesson or active lesson
   useEffect(() => {
-    if (courseDetails?.lessons && courseDetails.lessons.length > 0 && !activeLessonId) {
+    if (courseDetails?.lessons && courseDetails.lessons.length > 0 && !activeLessonId && viewMode === "content") {
       // Find the first uncompleted lesson
       const completedList = courseDetails.enrollment?.completedLessons || [];
       const uncompleted = courseDetails.lessons.find((l: any) => !completedList.includes(l.id));
       onActiveLessonChange(uncompleted ? uncompleted.id : courseDetails.lessons[0].id);
     }
   }, [courseDetails, activeLessonId]);
+
+  // Reset quiz states when active lesson changes
+  useEffect(() => {
+    setAnswers({});
+    setQuizResult(null);
+    if (activeLessonId) {
+      setViewMode("content");
+    }
+  }, [activeLessonId]);
+
+  // Content Copy Protection (Anti-Theft)
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
+        e.preventDefault();
+      }
+      if (e.key === "F12") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+      }
+      if (e.metaKey && e.altKey && (e.key.toLowerCase() === "c" || e.key.toLowerCase() === "j")) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   if (isLoading || !courseDetails) {
     return (
@@ -481,16 +542,25 @@ function LMSPlayerModal({
   const completedLessons: string[] = enrollment?.completedLessons || [];
 
   const activeLesson = lessons.find((l: any) => l.id === activeLessonId) || lessons[0];
+  const activeQuiz = activeLesson?.quizzes?.[0];
+  const hasQuiz = !!activeQuiz;
+
+  const allLessonsCompleted = lessons.length > 0 && lessons.every((l: any) => completedLessons.includes(l.id));
+  const finalQuiz = courseDetails.quizzes?.[0];
 
   const handleMarkComplete = async () => {
     if (!activeLesson) return;
-    await completeLessonMutation.mutateAsync(activeLesson.id);
-
-    // Auto-advance to next uncompleted lesson in the sequence
-    const currentIndex = lessons.findIndex((l: any) => l.id === activeLesson.id);
-    const nextLesson = lessons[currentIndex + 1];
-    if (nextLesson) {
-      onActiveLessonChange(nextLesson.id);
+    if (hasQuiz) {
+      setViewMode("quiz");
+      setAnswers({});
+      setQuizResult(null);
+    } else {
+      await completeLessonMutation.mutateAsync(activeLesson.id);
+      const currentIndex = lessons.findIndex((l: any) => l.id === activeLesson.id);
+      const nextLesson = lessons[currentIndex + 1];
+      if (nextLesson) {
+        onActiveLessonChange(nextLesson.id);
+      }
     }
   };
 
@@ -514,7 +584,10 @@ function LMSPlayerModal({
   const parsedVideoSrc = activeLesson?.videoUrl ? getEmbedVideoUrl(activeLesson.videoUrl) : null;
 
   return (
-    <div className="fixed inset-0 bg-background z-50 flex flex-col font-sans">
+    <div 
+      className="fixed inset-0 bg-background z-50 flex flex-col font-sans select-none"
+      onCopy={(e) => e.preventDefault()}
+    >
       {/* Top Banner Player Header */}
       <header className="h-16 border-b bg-card shrink-0 flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
@@ -569,85 +642,248 @@ function LMSPlayerModal({
               <div className="text-center py-20">
                 <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                 <h3 className="font-bold text-lg">Curriculum coming soon</h3>
-                <p className="text-xs text-muted-foreground mt-1">Recruiters are currently uploading video lectures and readings for this module.</p>
+                <p className="text-xs text-muted-foreground mt-1">Recruiters are currently uploading lectures for this module.</p>
               </div>
-            ) : activeLesson ? (
-              <div className="space-y-6">
-                <div>
+            ) : viewMode === "content" ? (
+              activeLesson ? (
+                <div className="space-y-6">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
+                      Topic {activeLesson.order || 1}
+                    </span>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold mt-3 text-foreground leading-tight">{activeLesson.title}</h1>
+                  </div>
+
+                  {/* Sleek aspect ratio video frame */}
+                  {activeLesson.videoUrl && (
+                    <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border relative group">
+                      {isYouTube && parsedVideoSrc ? (
+                        <iframe
+                          src={parsedVideoSrc}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : activeLesson.videoUrl ? (
+                        <video
+                          src={`${API_URL}${activeLesson.videoUrl}`}
+                          controls
+                          className="w-full h-full"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-white">
+                          <p className="text-xs font-semibold">Video Unavailable</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reading content segment */}
+                  {activeLesson.content && (
+                    <article className="prose prose-sm max-w-none pt-4 text-foreground/90 leading-relaxed font-medium whitespace-pre-wrap font-sans border-t border-border/80 select-none">
+                      {activeLesson.content}
+                    </article>
+                  )}
+
+                  {/* Reading material file download */}
+                  {activeLesson.readingFileUrl && (
+                    <div className="border border-primary/20 bg-primary/5 rounded-xl p-4 flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-foreground">Reading Material</p>
+                        <p className="text-xs text-muted-foreground truncate">{activeLesson.readingFilename || "Attached document"}</p>
+                      </div>
+                      <a
+                        href={`${API_URL}${activeLesson.readingFileUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={activeLesson.readingFilename || "reading-material"}
+                        className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-primary/90 transition-all shadow-sm shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download
+                      </a>
+                    </div>
+                  )}
+
+                </div>
+              ) : null
+            ) : (
+              <div className="space-y-8 select-none p-4 max-w-2xl mx-auto">
+                <div className="border-b pb-4">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
-                    Topic {activeLesson.order || 1}
+                    {viewMode === "final-exam" ? "Final Exam" : "Lesson Evaluation"}
                   </span>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold mt-3 text-foreground leading-tight">{activeLesson.title}</h1>
+                  <h1 className="text-xl sm:text-2xl font-black mt-3 text-foreground leading-tight">
+                    {viewMode === "final-exam" ? `${courseDetails.title} Final Examination` : `${activeLesson.title} Quiz`}
+                  </h1>
+                  <p className="text-xs text-muted-foreground mt-1.5 font-semibold">
+                    {viewMode === "final-exam" 
+                      ? "Answer all questions. Minimum passing score of 80% is required to earn your certificate." 
+                      : "Review quiz. 100% score required to mark this topic complete."}
+                  </p>
                 </div>
 
-                {/* Sleek aspect ratio video frame */}
-                {activeLesson.videoUrl && (
-                  <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border relative group">
-                    {isYouTube && parsedVideoSrc ? (
-                      <iframe
-                        src={parsedVideoSrc}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    ) : activeLesson.videoUrl ? (
-                      <video
-                        src={`${API_URL}${activeLesson.videoUrl}`}
-                        controls
-                        className="w-full h-full"
-                      />
+                {quizResult ? (
+                  <div className="bg-card border rounded-2xl p-6 text-center space-y-4 shadow-sm">
+                    {quizResult.passed ? (
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                          <Check className="w-6 h-6" />
+                        </div>
+                        <h3 className="font-extrabold text-lg text-emerald-800">Congratulations! You Passed!</h3>
+                        <p className="text-sm font-semibold text-muted-foreground">
+                          Score: <span className="text-foreground font-extrabold">{quizResult.score}%</span> ({quizResult.correctCount} of {quizResult.totalQuestions} correct)
+                        </p>
+                        {viewMode === "final-exam" ? (
+                          <div className="pt-2">
+                            <p className="text-xs text-muted-foreground mb-4 font-medium">Your certificate has been issued and is available in your Learning Center portal.</p>
+                            <button
+                              onClick={async () => {
+                                const certs = await coursesApi.getMyCertificates();
+                                const thisCert = certs.find((c: any) => c.courseId === courseId);
+                                if (thisCert) {
+                                  onViewCertificate(thisCert);
+                                } else {
+                                  onClose();
+                                }
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all mx-auto"
+                            >
+                              <Award className="w-4 h-4" /> View My Certificate
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setViewMode("content");
+                              setQuizResult(null);
+                              setAnswers({});
+                              const currentIndex = lessons.findIndex((l: any) => l.id === activeLesson.id);
+                              const nextLesson = lessons[currentIndex + 1];
+                              if (nextLesson) {
+                                onActiveLessonChange(nextLesson.id);
+                              }
+                            }}
+                            className="bg-primary text-primary-foreground px-6 py-2.5 rounded-xl text-xs font-extrabold hover:bg-primary/90 transition-all shadow-sm mx-auto flex items-center gap-1"
+                          >
+                            Proceed to Next Topic <ArrowRight className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     ) : (
-                      <div className="flex items-center justify-center h-full text-white">
-                        <p className="text-xs font-semibold">Video Unavailable</p>
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                          <XCircle className="w-6 h-6" />
+                        </div>
+                        <h3 className="font-extrabold text-lg text-rose-800">Evaluation Not Passed</h3>
+                        <p className="text-sm font-semibold text-muted-foreground">
+                          Score: <span className="text-rose-600 font-extrabold">{quizResult.score}%</span> ({quizResult.correctCount} of {quizResult.totalQuestions} correct)
+                        </p>
+                        <p className="text-xs text-muted-foreground font-semibold">Minimum score required is {viewMode === "final-exam" ? "80%" : "100%"}. You can retake the evaluation at any time.</p>
+                        <button
+                          onClick={() => {
+                            setQuizResult(null);
+                            setAnswers({});
+                          }}
+                          className="bg-rose-600 hover:bg-rose-500 text-white px-6 py-2.5 rounded-xl text-xs font-extrabold transition-all shadow-sm mx-auto"
+                        >
+                          Retry Evaluation
+                        </button>
                       </div>
                     )}
                   </div>
-                )}
+                ) : (
+                  <div className="space-y-8 pb-10">
+                    {(viewMode === "final-exam" ? finalQuiz : activeLesson.quizzes?.[0])?.questions.map((q: any, qIdx: number) => (
+                      <div key={q.id} className="space-y-3 border-b pb-6 last:border-0">
+                        <p className="font-bold text-sm text-foreground">
+                          {qIdx + 1}. {q.text}
+                        </p>
+                        <div className="grid gap-2.5">
+                          {q.options.map((opt: string, oIdx: number) => {
+                            const isSelected = answers[qIdx] === oIdx;
+                            return (
+                              <button
+                                key={opt}
+                                onClick={() => setAnswers(prev => ({ ...prev, [qIdx]: oIdx }))}
+                                className={`w-full text-left p-3.5 rounded-xl border text-xs font-semibold transition-all ${
+                                  isSelected 
+                                    ? "bg-primary/5 border-primary text-primary font-bold shadow-sm" 
+                                    : "bg-card border-border hover:bg-muted/15 text-foreground/80"
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
 
-                {/* Reading content segment */}
-                {activeLesson.content && (
-                  <article className="prose prose-sm max-w-none pt-4 text-foreground/90 leading-relaxed font-medium whitespace-pre-wrap font-sans border-t border-border/80">
-                    {activeLesson.content}
-                  </article>
-                )}
+                    <div className="flex justify-between items-center gap-4 border-t pt-6 bg-background">
+                      <button
+                        onClick={() => setViewMode("content")}
+                        className="px-4 py-2 border rounded-xl text-xs font-semibold hover:bg-muted transition-colors"
+                      >
+                        Back to Study Guide
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const currentQuiz = viewMode === "final-exam" ? finalQuiz : activeLesson.quizzes?.[0];
+                          if (!currentQuiz) return;
+                          
+                          const answeredCount = Object.keys(answers).length;
+                          if (answeredCount < currentQuiz.questions.length) {
+                            alert("Please answer all questions before submitting.");
+                            return;
+                          }
 
-                {/* Reading material file download */}
-                {activeLesson.readingFileUrl && (
-                  <div className="border border-primary/20 bg-primary/5 rounded-xl p-4 flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5 text-primary" />
+                          setSubmittingQuiz(true);
+                          try {
+                            const ansArray = Object.keys(answers).sort((a,b) => parseInt(a) - parseInt(b)).map(k => answers[parseInt(k)]);
+                            const res = await coursesApi.submitQuizAttempt(courseId, currentQuiz.id, ansArray);
+                            
+                            if (viewMode === "quiz" && res.passed) {
+                              await completeLessonMutation.mutateAsync(activeLesson.id);
+                            }
+
+                            setQuizResult(res);
+                          } catch (e) {
+                            alert("Error submitting quiz attempt. Please try again.");
+                          } finally {
+                            setSubmittingQuiz(false);
+                          }
+                        }}
+                        disabled={submittingQuiz || Object.keys(answers).length < (viewMode === "final-exam" ? finalQuiz : activeLesson.quizzes?.[0])?.questions.length}
+                        className="bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {submittingQuiz ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
+                        Submit Answers
+                      </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-foreground">Reading Material</p>
-                      <p className="text-xs text-muted-foreground truncate">{activeLesson.readingFilename || "Attached document"}</p>
-                    </div>
-                    <a
-                      href={`${API_URL}${activeLesson.readingFileUrl}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download={activeLesson.readingFilename || "reading-material"}
-                      className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-primary/90 transition-all shadow-sm shrink-0"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Download
-                    </a>
                   </div>
                 )}
-
               </div>
-            ) : null}
+            )}
           </div>
 
           {/* Footer action completion locks */}
-          {lessons.length > 0 && activeLesson && (
-            <div className="max-w-3xl mx-auto w-full border-t pt-6 mt-8 flex justify-between items-center gap-4 bg-background">
+          {lessons.length > 0 && activeLesson && viewMode === "content" && (
+            <div className="max-w-3xl mx-auto w-full border-t pt-6 mt-8 flex justify-between items-center gap-4 bg-background px-8 pb-4">
               <div className="text-xs text-muted-foreground font-semibold">
                 {completedLessons.includes(activeLesson.id) ? (
                   <span className="text-emerald-600 flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4" /> You've read/watched this topic.
                   </span>
                 ) : (
-                  <span>Ensure you review all videos and text guides before checking off this module.</span>
+                  <span>Ensure you review all video and text guides before evaluation.</span>
                 )}
               </div>
 
@@ -655,14 +891,16 @@ function LMSPlayerModal({
                 <button
                   onClick={handleMarkComplete}
                   disabled={completeLessonMutation.isPending}
-                  className="bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-extrabold hover:bg-primary/95 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                  className="bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {completeLessonMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : hasQuiz ? (
+                    <ArrowRight className="w-4 h-4" />
                   ) : (
                     <Check className="w-4 h-4" />
                   )}
-                  Mark Topic Complete
+                  {hasQuiz ? "Take Quiz" : "Mark Topic Complete"}
                 </button>
               ) : (
                 <button
@@ -671,8 +909,11 @@ function LMSPlayerModal({
                     const nextLesson = lessons[currentIndex + 1];
                     if (nextLesson) {
                       onActiveLessonChange(nextLesson.id);
-                    } else if (progress >= 100) {
-                      alert("You have completed this entire training course! Great job!");
+                    } else if (allLessonsCompleted && finalQuiz) {
+                      onActiveLessonChange(null);
+                      setViewMode("final-exam");
+                    } else {
+                      alert("You have completed all topics! Click Final Examination in syllabus to finish.");
                     }
                   }}
                   className="bg-muted hover:bg-muted-foreground/15 border text-foreground px-6 py-3 rounded-xl text-sm font-extrabold transition-all flex items-center gap-1"
@@ -692,13 +933,16 @@ function LMSPlayerModal({
           </div>
           <div className="flex-1 overflow-y-auto divide-y">
             {lessons.map((lesson: any, index: number) => {
-              const isSelected = lesson.id === activeLessonId;
+              const isSelected = lesson.id === activeLessonId && viewMode !== "final-exam";
               const isDone = completedLessons.includes(lesson.id);
 
               return (
                 <button
                   key={lesson.id}
-                  onClick={() => onActiveLessonChange(lesson.id)}
+                  onClick={() => {
+                    onActiveLessonChange(lesson.id);
+                    setViewMode("content");
+                  }}
                   className={`w-full text-left p-4.5 transition-all flex items-start gap-3.5 hover:bg-muted/15 ${
                     isSelected ? "bg-primary/5 text-primary border-l-4 border-primary" : "text-foreground"
                   }`}
@@ -722,11 +966,53 @@ function LMSPlayerModal({
                       {lesson.videoUrl && <span className="flex items-center gap-0.5"><Video className="w-3 h-3" /> Video</span>}
                       {lesson.content && <span className="flex items-center gap-0.5"><FileText className="w-3 h-3" /> Reading</span>}
                       {lesson.readingFileUrl && <span className="flex items-center gap-0.5"><Download className="w-3 h-3" /> Doc</span>}
+                      {lesson.quizzes?.length > 0 && <span className="flex items-center gap-0.5 bg-primary/5 text-primary px-1 rounded"><Award className="w-2.5 h-2.5" /> Quiz</span>}
                     </div>
                   </div>
                 </button>
               );
             })}
+
+            {finalQuiz && (
+              <button
+                disabled={!allLessonsCompleted}
+                onClick={() => {
+                  if (allLessonsCompleted) {
+                    onActiveLessonChange(null);
+                    setViewMode("final-exam");
+                    setAnswers({});
+                    setQuizResult(null);
+                  }
+                }}
+                className={`w-full text-left p-4.5 transition-all flex items-start gap-3.5 hover:bg-muted/15 border-t border-dashed ${
+                  viewMode === "final-exam" 
+                    ? "bg-primary/5 text-primary border-l-4 border-primary" 
+                    : "text-foreground disabled:opacity-60"
+                }`}
+              >
+                {progress >= 100 ? (
+                  <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Award className="w-3.5 h-3.5" />
+                  </span>
+                ) : !allLessonsCompleted ? (
+                  <span className="w-5 h-5 rounded-full bg-muted border text-muted-foreground flex items-center justify-center shrink-0 mt-0.5 text-xs">
+                    <Lock className="w-3 h-3" />
+                  </span>
+                ) : (
+                  <span className="w-5 h-5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold animate-bounce">
+                    🏆
+                  </span>
+                )}
+                <div className="min-w-0">
+                  <p className={`text-xs font-bold leading-snug truncate ${viewMode === "final-exam" ? "text-primary" : "text-foreground"}`}>
+                    Final Examination
+                  </p>
+                  <p className="text-[9px] font-semibold text-muted-foreground/80 mt-0.5 uppercase">
+                    {!allLessonsCompleted ? "Locked - Finish all topics" : progress >= 100 ? "Completed" : "Unlocked - Take Test"}
+                  </p>
+                </div>
+              </button>
+            )}
           </div>
         </aside>
       </div>

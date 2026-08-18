@@ -34,6 +34,7 @@ export default function Header() {
                 src="/reliant-logo.png" 
                 alt="Reliant Home Health Agency" 
                 fill 
+                sizes="160px"
                 className="object-contain"
                 priority
               />

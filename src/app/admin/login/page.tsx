@@ -59,6 +59,7 @@ export default function AdminLoginPage() {
               src="/reliant-logo.png" 
               alt="Reliant Home Health Agency" 
               fill
+              sizes="192px"
               className="object-contain"
               priority
             />

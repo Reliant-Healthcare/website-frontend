@@ -12,6 +12,7 @@ export default function Footer() {
                 src="/reliant-logo.png" 
                 alt="Reliant Home Health Agency" 
                 fill 
+                sizes="160px"
                 className="object-contain"
               />
             </div>

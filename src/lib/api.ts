@@ -250,6 +250,11 @@ export const coursesApi = {
     apiFetch(`/courses/${id}/enroll`, { method: 'POST' }),
   completeLesson: (courseId: string, lessonId: string) =>
     apiFetch(`/courses/${courseId}/lessons/${lessonId}/complete`, { method: 'POST' }),
+  submitQuizAttempt: (courseId: string, quizId: string, answers: number[]) =>
+    apiFetch(`/courses/${courseId}/quizzes/${quizId}/attempt`, {
+      method: 'POST',
+      body: JSON.stringify({ answers })
+    }),
 
   getMyCertificates: () =>
     apiFetch('/courses/my-certificates'),
