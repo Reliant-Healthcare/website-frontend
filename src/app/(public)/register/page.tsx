@@ -59,6 +59,13 @@ export default function RegisterPage() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const isValid = 
+    formData.firstName.trim().length > 0 &&
+    formData.lastName.trim().length > 0 &&
+    formData.email.trim().length > 0 &&
+    formData.password.length >= 8 &&
+    formData.password === formData.confirmPassword;
+
   const passwordRequirements = [
     { label: "At least 8 characters", met: formData.password.length >= 8 },
     { label: "Passwords match", met: formData.password === formData.confirmPassword && formData.confirmPassword.length > 0 },
@@ -180,7 +187,7 @@ export default function RegisterPage() {
 
           <button
             type="submit"
-            disabled={registerMutation.isPending}
+            disabled={registerMutation.isPending || !isValid}
             className="w-full flex justify-center py-3.5 px-4 border border-transparent text-sm font-bold rounded-xl text-primary-foreground bg-primary hover:bg-primary/95 focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50 mt-4"
           >
             {registerMutation.isPending ? (
