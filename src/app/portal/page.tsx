@@ -739,21 +739,43 @@ function LMSPlayerModal({
                         </p>
                         {viewMode === "final-exam" ? (
                           <div className="pt-2">
-                            <p className="text-xs text-muted-foreground mb-4 font-medium">Your certificate has been issued and is available in your Learning Center portal.</p>
-                            <button
-                              onClick={async () => {
-                                const certs = await coursesApi.getMyCertificates();
-                                const thisCert = certs.find((c: any) => c.courseId === courseId);
-                                if (thisCert) {
-                                  onViewCertificate(thisCert);
-                                } else {
-                                  onClose();
-                                }
-                              }}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all mx-auto"
-                            >
-                              <Award className="w-4 h-4" /> View My Certificate
-                            </button>
+                            {quizResult.requiresAttestationSignOff ? (
+                              <AttestationSignOff
+                                courseTitle={courseDetails.title}
+                                onAttestationComplete={async (signatureUrl) => {
+                                  try {
+                                    await coursesApi.attest(courseId, signatureUrl);
+                                    queryClient.invalidateQueries({ queryKey: ["my-courses"] });
+                                    queryClient.invalidateQueries({ queryKey: ["my-certificates"] });
+                                    queryClient.invalidateQueries({ queryKey: ["portal-course-details", courseId] });
+                                    setQuizResult({
+                                      ...quizResult,
+                                      requiresAttestationSignOff: false
+                                    });
+                                  } catch (err) {
+                                    alert("Failed to submit attestation signature. Please try again.");
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <>
+                                <p className="text-xs text-muted-foreground mb-4 font-medium">Your certificate has been issued and is available in your Learning Center portal.</p>
+                                <button
+                                  onClick={async () => {
+                                    const certs = await coursesApi.getMyCertificates();
+                                    const thisCert = certs.find((c: any) => c.courseId === courseId);
+                                    if (thisCert) {
+                                      onViewCertificate(thisCert);
+                                    } else {
+                                      onClose();
+                                    }
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all mx-auto"
+                                >
+                                  <Award className="w-4 h-4" /> View My Certificate
+                                </button>
+                              </>
+                            )}
                           </div>
                         ) : (
                           <button
@@ -1063,6 +1085,9 @@ function CertificateViewModal({
                   .cert-footer { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 40px; }
                   .cert-sign { border-top: 1px solid #999; width: 160px; font-size: 11px; padding-top: 8px; color: #444; }
                   .cert-meta { font-size: 10px; color: #777; margin-top: 50px; }
+                  .cert-sign-container { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 50px; max-width: 600px; margin-left: auto; margin-right: auto; gap: 40px; }
+                  .cert-sign-col { width: 140px; text-align: center; font-size: 9px; }
+                  .cert-sign-border { border-top: 1px solid #ccc; padding-top: 6px; }
                 }
               </style>
             </head>
@@ -1167,12 +1192,23 @@ function CertificateViewModal({
               </div>
 
               {/* Digital clinical signatures */}
-              <div className="flex justify-between items-end gap-10 mt-14 max-w-xl mx-auto">
-                <div className="w-36 border-t border-muted/80 pt-1.5 text-center">
+              <div className="cert-sign-container flex justify-between items-end gap-10 mt-14 max-w-2xl mx-auto">
+                {cert.signature ? (
+                  <div className="cert-sign-col w-36 text-center flex flex-col items-center">
+                    <img src={cert.signature} alt="Employee Signature" className="max-h-[35px] object-contain mb-0.5" />
+                    <div className="w-full cert-sign-border border-t border-muted/80 pt-1.5">
+                      <p className="text-[9px] font-semibold text-black leading-none">{cert.user?.firstName} {cert.user?.lastName}</p>
+                      <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Employee Signature</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cert-sign-col w-36" />
+                )}
+                <div className="cert-sign-col w-36 cert-sign-border border-t border-muted/80 pt-1.5 text-center">
                   <p className="text-[9px] font-semibold font-serif text-[#0d3b66] italic mb-0.5 leading-none">Elizabeth Warren, RN</p>
                   <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Clinical Director</p>
                 </div>
-                <div className="w-36 border-t border-muted/80 pt-1.5 text-center">
+                <div className="cert-sign-col w-36 cert-sign-border border-t border-muted/80 pt-1.5 text-center">
                   <p className="text-[9px] font-semibold font-serif text-[#0d3b66] italic mb-0.5 leading-none">Arthur Pendragon</p>
                   <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Administrator</p>
                 </div>
@@ -1911,3 +1947,80 @@ function ChatbotCompanion({ activeTab }: { activeTab: "applications" | "courses"
   );
 }
 
+function AttestationSignOff({
+  courseTitle,
+  onAttestationComplete
+}: {
+  courseTitle: string;
+  onAttestationComplete: (signatureUrl: string) => Promise<void>;
+}) {
+  const [signature, setSignature] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!signature) {
+      alert("Please draw your signature first.");
+      return;
+    }
+    if (!agreed) {
+      alert("You must agree to the attestation statement.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onAttestationComplete(signature);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isCompliance = courseTitle.toLowerCase().includes("compulsory") || courseTitle.toLowerCase().includes("annual");
+
+  const attestationText = isCompliance 
+    ? "I attest that I completed the annual OLTL-required training and reviewed each topic in this course curriculum. I understand my responsibilities related to participant rights, incident reporting, complaint resolution, quality management, and fraud and financial abuse prevention. I agree to comply with all applicable agency policies and procedures."
+    : "I attest that I have fully read, watched, and completed all required training modules in this clinical onboarding curriculum. I certify that I completed the lessons and exams independently.";
+
+  return (
+    <div className="bg-card border rounded-2xl p-6 text-left space-y-5 shadow-sm max-w-lg mx-auto">
+      <div className="space-y-1">
+        <h3 className="font-extrabold text-lg text-primary">Required E-Signature Attestation</h3>
+        <p className="text-xs text-muted-foreground font-semibold">Sign below to confirm you completed this course and issue your certificate.</p>
+      </div>
+
+      <div className="bg-muted/15 border rounded-xl p-4 text-xs leading-relaxed text-foreground/90 font-medium">
+        {attestationText}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-foreground uppercase tracking-wider block">Draw Your Signature</label>
+        <SignaturePad value={signature || undefined} onChange={setSignature} />
+      </div>
+
+      <div className="flex items-start gap-2.5">
+        <input 
+          type="checkbox"
+          id="attestAgree"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 mt-0.5 cursor-pointer"
+        />
+        <label htmlFor="attestAgree" className="text-xs text-muted-foreground font-semibold leading-normal cursor-pointer select-none">
+          I attest under penalty of perjury that the signature above is my own and the information is true and correct.
+        </label>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={isSubmitting || !signature || !agreed}
+        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+      >
+        {isSubmitting ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          "Submit Attestation & Unlock Certificate"
+        )}
+      </button>
+    </div>
+  );
+}

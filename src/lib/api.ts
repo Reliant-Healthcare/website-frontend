@@ -259,6 +259,12 @@ export const coursesApi = {
   getMyCertificates: () =>
     apiFetch('/courses/my-certificates'),
 
+  attest: (courseId: string, signature: string) =>
+    apiFetch(`/courses/${courseId}/attest`, {
+      method: 'POST',
+      body: JSON.stringify({ signature })
+    }),
+
   getEnrollments: (id: string) =>
     apiFetch(`/courses/${id}/enrollments`),
 

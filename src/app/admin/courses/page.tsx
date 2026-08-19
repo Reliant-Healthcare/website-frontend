@@ -24,7 +24,8 @@ export default function CoursesPage() {
   const [createFormData, setCreateFormData] = useState({
     title: "",
     category: "Compliance",
-    description: ""
+    description: "",
+    requiresAttestation: false
   });
 
   // Course info edit form state
@@ -32,7 +33,8 @@ export default function CoursesPage() {
     title: "",
     category: "",
     description: "",
-    isActive: true
+    isActive: true,
+    requiresAttestation: false
   });
 
   const [customCategory, setCustomCategory] = useState("");
@@ -81,7 +83,7 @@ export default function CoursesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['courses'] });
       setIsCreateModalOpen(false);
-      setCreateFormData({ title: "", category: "Compliance", description: "" });
+      setCreateFormData({ title: "", category: "Compliance", description: "", requiresAttestation: false });
       setCustomCategory("");
     }
   });
@@ -144,7 +146,8 @@ export default function CoursesPage() {
       title: course.title,
       category: course.category,
       description: course.description || "",
-      isActive: course.isActive !== false
+      isActive: course.isActive !== false,
+      requiresAttestation: course.requiresAttestation || false
     });
     setEditCustomCategory("");
     setActiveBuilderTab("lessons");
@@ -342,6 +345,18 @@ export default function CoursesPage() {
                   placeholder="Provide an overview of what the candidate will learn in this module..." 
                 />
               </div>
+              <div className="flex items-center gap-2.5 pt-1">
+                <input 
+                  type="checkbox"
+                  id="requiresAttestationCreate"
+                  checked={createFormData.requiresAttestation}
+                  onChange={(e) => setCreateFormData({...createFormData, requiresAttestation: e.target.checked})}
+                  className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5"
+                />
+                <label htmlFor="requiresAttestationCreate" className="text-[13px] font-semibold select-none cursor-pointer">
+                  Require E-Signature Attestation on Completion
+                </label>
+              </div>
             </div>
             <div className="p-6 border-t bg-muted/10 flex justify-end gap-3">
               <button onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2.5 border rounded-xl text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
@@ -469,6 +484,18 @@ export default function CoursesPage() {
                       className="w-full border rounded-xl px-3.5 py-2.5 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm leading-relaxed resize-none"
                       rows={5}
                     />
+                  </div>
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <input 
+                      type="checkbox"
+                      id="requiresAttestationEdit"
+                      checked={editCourseData.requiresAttestation}
+                      onChange={(e) => setEditCourseData({...editCourseData, requiresAttestation: e.target.checked})}
+                      className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5"
+                    />
+                    <label htmlFor="requiresAttestationEdit" className="text-[13px] font-semibold select-none cursor-pointer">
+                      Require E-Signature Attestation on Completion
+                    </label>
                   </div>
 
                   <div className="pt-4 border-t flex justify-between items-center gap-4">
