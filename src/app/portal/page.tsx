@@ -490,6 +490,8 @@ function LMSPlayerModal({
 
   // Content Copy Protection (Anti-Theft)
   useEffect(() => {
+    if (!courseDetails?.enableAntiTheft) return;
+
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault();
     };
@@ -523,7 +525,7 @@ function LMSPlayerModal({
       document.removeEventListener("contextmenu", handleContextMenu);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [courseDetails?.enableAntiTheft]);
 
   if (isLoading || !courseDetails) {
     return (
@@ -585,8 +587,7 @@ function LMSPlayerModal({
 
   return (
     <div 
-      className="fixed inset-0 bg-background z-50 flex flex-col font-sans select-none"
-      onCopy={(e) => e.preventDefault()}
+      className="fixed inset-0 bg-background z-50 flex flex-col font-sans"
     >
       {/* Top Banner Player Header */}
       <header className="h-16 border-b bg-card shrink-0 flex items-center justify-between px-6">
@@ -680,7 +681,7 @@ function LMSPlayerModal({
 
                   {/* Reading content segment */}
                   {activeLesson.content && (
-                    <article className="prose prose-sm max-w-none pt-4 text-foreground/90 leading-relaxed font-medium whitespace-pre-wrap font-sans border-t border-border/80 select-none">
+                    <article className="prose prose-sm max-w-none pt-4 text-foreground/90 leading-relaxed font-medium whitespace-pre-wrap font-sans border-t border-border/80">
                       {activeLesson.content}
                     </article>
                   )}
@@ -711,7 +712,7 @@ function LMSPlayerModal({
                 </div>
               ) : null
             ) : (
-              <div className="space-y-8 select-none p-4 max-w-2xl mx-auto">
+              <div className="space-y-8 p-4 max-w-2xl mx-auto">
                 <div className="border-b pb-4">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
                     {viewMode === "final-exam" ? "Final Exam" : "Lesson Evaluation"}
