@@ -11,16 +11,42 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { coursesApi } from "@/lib/api";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { useSearchParams } from "next/navigation";
 
 export default function CoursesPage() {
+  const searchParams = useSearchParams();
+  const initialCourseId = searchParams?.get("courseId") || null;
+  const initialBuilderTab = (searchParams?.get("tab") as "info" | "lessons" | "enrollments") || "lessons";
+
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedCourse, setSelectedCourse] = useState<any | null>(null);
-  const [activeBuilderTab, setActiveBuilderTab] = useState<"info" | "lessons" | "enrollments">("lessons");
-  const [editingLesson, setEditingLesson] = useState<any | null>(null); // For nested lesson editor
+  const [selectedCourse, setSelectedCourseState] = useState<any | null>(initialCourseId ? { id: initialCourseId } : null);
+  const [activeBuilderTab, setActiveBuilderTabState] = useState<"info" | "lessons" | "enrollments">(initialBuilderTab);
+  const [editingLesson, setEditingLesson] = useState<any | null>(null);
   const [enrollmentSearch, setEnrollmentSearch] = useState("");
   const [enrollmentStatusFilter, setEnrollmentStatusFilter] = useState("ALL");
   
   const queryClient = useQueryClient();
+
+  const setSelectedCourse = (course: any | null) => {
+    setSelectedCourseState(course);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (course?.id) params.set("courseId", course.id);
+      else params.delete("courseId");
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  };
+
+  const setActiveBuilderTab = (tab: "info" | "lessons" | "enrollments") => {
+    setActiveBuilderTabState(tab);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", tab);
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  };
 
   // Create course form state
   const [createFormData, setCreateFormData] = useState({

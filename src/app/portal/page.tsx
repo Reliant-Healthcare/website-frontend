@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { applicationsApi, authApi, coursesApi, aiApi } from "@/lib/api";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import SignaturePad from "@/components/SignaturePad";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
@@ -38,15 +38,52 @@ const appStatusLabel: Record<string, { text: string; color: string }> = {
 export default function PortalPage() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"applications" | "courses" | "certificates">("applications");
   
-  // LMS Player & Certificate Modal States
-  const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
-  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  // Read initial states from URL params or sessionStorage for full-application reload persistence
+  const initialTab = (searchParams?.get("tab") as "applications" | "courses" | "certificates") || 
+    (typeof window !== "undefined" ? sessionStorage.getItem("reliant_portal_tab") as any : null) || "applications";
+  const initialCourseId = searchParams?.get("courseId") || 
+    (typeof window !== "undefined" ? sessionStorage.getItem("reliant_portal_courseId") : null) || null;
+  const initialLessonId = searchParams?.get("lessonId") || 
+    (typeof window !== "undefined" ? sessionStorage.getItem("reliant_portal_lessonId") : null) || null;
+
+  const [activeTab, setActiveTabState] = useState<"applications" | "courses" | "certificates">(initialTab);
+  const [activeCourseId, setActiveCourseIdState] = useState<string | null>(initialCourseId);
+  const [activeLessonId, setActiveLessonIdState] = useState<string | null>(initialLessonId);
   const [viewingCertificate, setViewingCertificate] = useState<any | null>(null);
+
+  // Helper function for full-application state persistence sync
+  const updatePortalState = (tab: "applications" | "courses" | "certificates", courseId: string | null = null, lessonId: string | null = null) => {
+    setActiveTabState(tab);
+    setActiveCourseIdState(courseId);
+    setActiveLessonIdState(lessonId);
+
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("reliant_portal_tab", tab);
+      if (courseId) sessionStorage.setItem("reliant_portal_courseId", courseId);
+      else sessionStorage.removeItem("reliant_portal_courseId");
+      if (lessonId) sessionStorage.setItem("reliant_portal_lessonId", lessonId);
+      else sessionStorage.removeItem("reliant_portal_lessonId");
+
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", tab);
+      if (courseId) params.set("courseId", courseId);
+      else params.delete("courseId");
+      if (lessonId) params.set("lessonId", lessonId);
+      else params.delete("lessonId");
+
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  };
+
+  const setActiveTab = (tab: "applications" | "courses" | "certificates") => updatePortalState(tab, activeCourseId, activeLessonId);
+  const setActiveCourseId = (courseId: string | null) => updatePortalState(activeTab, courseId, null);
+  const setActiveLessonId = (lessonId: string | null) => updatePortalState(activeTab, activeCourseId, lessonId);
 
   // Query applicant applications
   const { data: applications = [], isLoading: isLoadingApps } = useQuery({
@@ -548,6 +585,8 @@ function LMSPlayerModal({
   const activeQuiz = activeLesson?.quizzes?.[0];
   const hasQuiz = !!activeQuiz;
 
+  const mandatoryLessons = lessons.filter((l: any) => l.isRequired !== false);
+  const allMandatoryCompleted = mandatoryLessons.length === 0 || mandatoryLessons.every((l: any) => completedLessons.includes(l.id));
   const allLessonsCompleted = lessons.length > 0 && lessons.every((l: any) => completedLessons.includes(l.id));
   const finalQuiz = courseDetails.quizzes?.[0];
 
@@ -1029,9 +1068,9 @@ function LMSPlayerModal({
 
             {finalQuiz && (
               <button
-                disabled={!allLessonsCompleted}
+                disabled={!allMandatoryCompleted}
                 onClick={() => {
-                  if (allLessonsCompleted) {
+                  if (allMandatoryCompleted) {
                     onActiveLessonChange(null);
                     setViewMode("final-exam");
                     setAnswers({});
@@ -1041,28 +1080,38 @@ function LMSPlayerModal({
                 className={`w-full text-left p-4.5 transition-all flex items-start gap-3.5 hover:bg-muted/15 border-t border-dashed ${
                   viewMode === "final-exam" 
                     ? "bg-primary/5 text-primary border-l-4 border-primary" 
-                    : "text-foreground disabled:opacity-60"
+                    : !allMandatoryCompleted ? "opacity-60 cursor-not-allowed bg-muted/20" : "text-foreground"
                 }`}
+                title={!allMandatoryCompleted ? "Complete all mandatory topics to unlock the Final Examination" : "Take Final Examination"}
               >
                 {progress >= 100 ? (
                   <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
                     <Award className="w-3.5 h-3.5" />
                   </span>
-                ) : !allLessonsCompleted ? (
-                  <span className="w-5 h-5 rounded-full bg-muted border text-muted-foreground flex items-center justify-center shrink-0 mt-0.5 text-xs">
-                    <Lock className="w-3 h-3" />
+                ) : !allMandatoryCompleted ? (
+                  <span className="w-5 h-5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-3.5 h-3.5" />
                   </span>
                 ) : (
-                  <span className="w-5 h-5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 mt-0.5 text-xs font-bold animate-bounce">
-                    🏆
+                  <span className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                    <Award className="w-3.5 h-3.5" />
                   </span>
                 )}
-                <div className="min-w-0">
-                  <p className={`text-xs font-bold leading-snug truncate ${viewMode === "final-exam" ? "text-primary" : "text-foreground"}`}>
-                    Final Examination
-                  </p>
-                  <p className="text-[9px] font-semibold text-muted-foreground/80 mt-0.5 uppercase">
-                    {!allLessonsCompleted ? "Locked - Finish all topics" : progress >= 100 ? "Completed" : "Unlocked - Take Test"}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-extrabold text-foreground">
+                      Course Final Examination
+                    </p>
+                    {!allMandatoryCompleted && (
+                      <span className="text-[9px] font-bold bg-amber-500/10 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {!allMandatoryCompleted 
+                      ? `Complete all mandatory topics to unlock (${completedLessons.filter(id => mandatoryLessons.some((m: any) => m.id === id)).length}/${mandatoryLessons.length} finished)` 
+                      : `${finalQuiz.questions?.length || 20} evaluation questions (80% passing score)`}
                   </p>
                 </div>
               </button>
@@ -1850,7 +1899,7 @@ function ChatbotCompanion({ activeTab }: { activeTab: "applications" | "courses"
     : "Ask about uploading forms, BLS prerequisites, TB clearances...";
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end">
       {/* Floating Toggle Button */}
       <AnimatePresence>
         {!isOpen && (
