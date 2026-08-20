@@ -15,6 +15,7 @@ import { applicationsApi, authApi, coursesApi, aiApi } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import SignaturePad from "@/components/SignaturePad";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -681,9 +682,9 @@ function LMSPlayerModal({
 
                   {/* Reading content segment */}
                   {activeLesson.content && (
-                    <article className="prose prose-sm max-w-none pt-4 text-foreground/90 leading-relaxed font-medium whitespace-pre-wrap font-sans border-t border-border/80">
-                      {activeLesson.content}
-                    </article>
+                    <div className="pt-4 border-t border-border/80">
+                      <MarkdownRenderer content={activeLesson.content} />
+                    </div>
                   )}
 
                   {/* Reading material file download */}
