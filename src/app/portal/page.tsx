@@ -7,7 +7,7 @@ import {
   Loader2, AlertCircle, Lock, ChevronRight, LogOut, User,
   Shield, Bell, KeyRound, BookOpen, Video, Award, Settings,
   Check, Play, ArrowRight, BookOpenCheck, ChevronLeft, Printer,
-  MessageSquare, Sparkles, Bot, Send,
+  MessageSquare, Sparkles, Bot, Send, ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -650,9 +650,24 @@ function LMSPlayerModal({
               activeLesson ? (
                 <div className="space-y-6">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
-                      Topic {activeLesson.order || 1}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
+                        Topic {activeLesson.order || 1}
+                      </span>
+                      {activeLesson.isRequired === false ? (
+                        <span className="text-[10px] font-semibold bg-muted text-muted-foreground border px-2.5 py-1 rounded-full">
+                          Elective / Supplemental Study
+                        </span>
+                      ) : courseDetails?.title?.includes("OLTL") ? (
+                        <span className="text-[10px] font-extrabold bg-red-500/10 text-red-600 border border-red-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+                          <ShieldAlert className="w-3.5 h-3.5 text-red-600" /> 55 Pa. Code § 52.21 Mandatory Topic
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold bg-amber-500/10 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
+                          Mandatory Topic
+                        </span>
+                      )}
+                    </div>
                     <h1 className="text-2xl sm:text-3xl font-extrabold mt-3 text-foreground leading-tight">{activeLesson.title}</h1>
                   </div>
 
@@ -982,10 +997,25 @@ function LMSPlayerModal({
                       {index + 1}
                     </span>
                   )}
-                  <div className="min-w-0">
-                    <p className={`text-xs font-bold leading-snug truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
-                      {lesson.title}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className={`text-xs font-bold leading-snug ${isSelected ? "text-primary" : "text-foreground"}`}>
+                        {lesson.title}
+                      </p>
+                      {lesson.isRequired === false ? (
+                        <span className="text-[9px] font-semibold bg-muted text-muted-foreground border px-1.5 py-0.2 rounded-full">
+                          Elective
+                        </span>
+                      ) : courseDetails?.title?.includes("OLTL") ? (
+                        <span className="text-[9px] font-extrabold bg-red-500/10 text-red-600 border border-red-200 px-1.5 py-0.2 rounded-full">
+                          55 Pa. Code § 52.21 Mandatory
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold bg-amber-500/10 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded-full">
+                          Mandatory
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-1 text-[9px] font-semibold text-muted-foreground/80 uppercase">
                       {lesson.videoUrl && <span className="flex items-center gap-0.5"><Video className="w-3 h-3" /> Video</span>}
                       {lesson.content && <span className="flex items-center gap-0.5"><FileText className="w-3 h-3" /> Reading</span>}

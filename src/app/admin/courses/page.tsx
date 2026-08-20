@@ -45,12 +45,7 @@ export default function CoursesPage() {
   const [editCustomCategory, setEditCustomCategory] = useState("");
 
   // Lesson form state
-  const [lessonFormData, setLessonFormData] = useState({
-    title: "",
-    videoUrl: "",
-    content: "",
-    order: 1
-  });
+  const [lessonFormData, setLessonFormData] = useState({ title: "", videoUrl: "", content: "", order: 1, isRequired: true });
   const [lessonReadingFile, setLessonReadingFile] = useState<File | null>(null);
   const [clearReadingFile, setClearReadingFile] = useState(false);
   const readingFileInputRef = useRef<HTMLInputElement>(null);
@@ -201,7 +196,8 @@ export default function CoursesPage() {
       title: "",
       videoUrl: "",
       content: "",
-      order: nextOrder
+      order: nextOrder,
+      isRequired: true
     });
     setLessonReadingFile(null);
     setClearReadingFile(false);
@@ -213,7 +209,8 @@ export default function CoursesPage() {
       title: lesson.title,
       videoUrl: lesson.videoUrl || "",
       content: lesson.content || "",
-      order: lesson.order || 1
+      order: lesson.order || 1,
+      isRequired: lesson.isRequired !== undefined ? lesson.isRequired : true
     });
     setLessonReadingFile(null);
     setClearReadingFile(false);
@@ -1006,6 +1003,22 @@ export default function CoursesPage() {
                           <span className="text-xs font-semibold text-muted-foreground">Click to attach PDF or DOCX reading material</span>
                         </label>
                       )}
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-3 border-t">
+                      <input
+                        type="checkbox"
+                        id="isRequiredLesson"
+                        checked={lessonFormData.isRequired}
+                        onChange={(e) => setLessonFormData(prev => ({ ...prev, isRequired: e.target.checked }))}
+                        className="rounded border-border text-primary focus:ring-primary w-4 h-4"
+                      />
+                      <label htmlFor="isRequiredLesson" className="text-xs font-bold text-foreground cursor-pointer">
+                        Required Topic (Mandatory for Course Completion)
+                      </label>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        Uncheck for Elective / Supplemental Study
+                      </span>
                     </div>
                   </div>
 
