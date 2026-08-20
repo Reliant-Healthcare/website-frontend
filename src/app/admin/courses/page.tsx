@@ -5,10 +5,12 @@ import {
   Plus, BookOpen, Users, Video, X, Settings, Loader2, 
   Trash2, Edit, Save, FileText, Play, CheckCircle, ArrowRight,
   Paperclip, Download, XCircle as XCircleIcon,
+  Bold, Italic, List, ListOrdered, Quote, Minus, Eye
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { coursesApi } from "@/lib/api";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 export default function CoursesPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -52,6 +54,24 @@ export default function CoursesPage() {
   const [lessonReadingFile, setLessonReadingFile] = useState<File | null>(null);
   const [clearReadingFile, setClearReadingFile] = useState(false);
   const readingFileInputRef = useRef<HTMLInputElement>(null);
+  const lessonContentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const [lessonContentMode, setLessonContentMode] = useState<"write" | "preview">("write");
+
+  const insertMarkdown = (prefix: string, suffix: string = "") => {
+    const textarea = lessonContentTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const val = lessonFormData.content || "";
+    const selectedText = val.substring(start, end) || "text";
+    const replacement = `${prefix}${selectedText}${suffix}`;
+    const newContent = val.substring(0, start) + replacement + val.substring(end);
+    setLessonFormData({ ...lessonFormData, content: newContent });
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
+    }, 0);
+  };
 
   // Fetch all courses
   const { data: courses = [], isLoading } = useQuery({
@@ -789,19 +809,133 @@ export default function CoursesPage() {
                       />
                     </div>
 
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-semibold flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-primary" />
-                        Readings Content
-                        <span className="text-[10px] font-normal text-muted-foreground">(Inline text content. Use below for an uploaded document.)</span>
-                      </label>
-                      <textarea 
-                        value={lessonFormData.content}
-                        onChange={(e) => setLessonFormData({...lessonFormData, content: e.target.value})}
-                        placeholder="Write or paste the clinical procedures, safety checklists, or study guide documents for this topic..."
-                        className="w-full border rounded-xl p-4 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm leading-relaxed"
-                        rows={6}
-                      />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-primary" />
+                          Reading Content (Markdown Supported)
+                        </label>
+                        <div className="flex items-center bg-muted/60 p-1 rounded-xl border border-border/60">
+                          <button
+                            type="button"
+                            onClick={() => setLessonContentMode("write")}
+                            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                              lessonContentMode === "write"
+                                ? "bg-background text-primary shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            Write
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setLessonContentMode("preview")}
+                            className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                              lessonContentMode === "preview"
+                                ? "bg-background text-primary shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            Live Preview
+                          </button>
+                        </div>
+                      </div>
+
+                      {lessonContentMode === "write" ? (
+                        <div className="space-y-2">
+                          {/* Markdown Formatting Toolbar */}
+                          <div className="flex flex-wrap items-center gap-1 bg-muted/40 p-1.5 rounded-xl border border-border/60">
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("## ", "")}
+                              className="px-2 py-1 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Header 2 (##)"
+                            >
+                              H2
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("### ", "")}
+                              className="px-2 py-1 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Header 3 (###)"
+                            >
+                              H3
+                            </button>
+                            <div className="h-4 w-px bg-border/80 mx-1" />
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("**", "**")}
+                              className="p-1.5 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Bold (**text**)"
+                            >
+                              <Bold className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("*", "*")}
+                              className="p-1.5 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Italic (*text*)"
+                            >
+                              <Italic className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="h-4 w-px bg-border/80 mx-1" />
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("* ", "")}
+                              className="p-1.5 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Bullet List (* item)"
+                            >
+                              <List className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("1. ", "")}
+                              className="p-1.5 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Numbered List (1. item)"
+                            >
+                              <ListOrdered className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="h-4 w-px bg-border/80 mx-1" />
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("> ", "")}
+                              className="p-1.5 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Blockquote (> quote)"
+                            >
+                              <Quote className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertMarkdown("\n---\n", "")}
+                              className="p-1.5 hover:bg-background rounded text-xs font-bold text-foreground border border-transparent hover:border-border transition-all"
+                              title="Divider Line (---)"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <textarea 
+                            ref={lessonContentTextareaRef}
+                            value={lessonFormData.content}
+                            onChange={(e) => setLessonFormData({...lessonFormData, content: e.target.value})}
+                            placeholder="Write or paste your clinical Markdown study guide content..."
+                            className="w-full border rounded-xl p-4 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm leading-relaxed font-mono min-h-[220px]"
+                            rows={8}
+                          />
+                        </div>
+                      ) : (
+                        <div className="border rounded-xl p-4 bg-background max-h-[350px] overflow-y-auto">
+                          {lessonFormData.content ? (
+                            <MarkdownRenderer content={lessonFormData.content} />
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic py-8 text-center">
+                              No content written yet. Switch to the Write tab to add lesson content.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="space-y-1.5">
