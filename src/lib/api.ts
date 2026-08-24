@@ -331,7 +331,10 @@ export const aiApi = {
     }),
 
   getAdminChatHistory: (userId: string) => apiFetch(`/ai/history/admin/${userId}`),
+
+  getAnalyticsSummary: () => apiFetch('/ai/analytics/summary'),
 };
+
 // ── Contact API ──────────────────────────────────────────────────────────────
 
 export const contactApi = {
