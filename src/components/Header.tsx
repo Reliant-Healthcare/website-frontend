@@ -26,6 +26,20 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      {/* Top Info Bar */}
+      <div className="bg-primary text-primary-foreground text-xs py-1.5 px-4 hidden lg:block">
+        <div className="container mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <span><strong>Office Hours:</strong> Mon - Fri 9:00 AM – 5:00 PM</span>
+            <span className="opacity-90">• <strong>24/7 After-Hours Line Available</strong> (For urgent client care)</span>
+          </div>
+          <div className="flex items-center gap-6">
+            <span><strong>Email:</strong> <a href="mailto:Reliantagency1@gmail.com" className="underline hover:opacity-80">Reliantagency1@gmail.com</a></span>
+            <span><strong>NPI:</strong> 1609011956</span>
+          </div>
+        </div>
+      </div>
+
       <div className="container mx-auto px-4 h-20 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">

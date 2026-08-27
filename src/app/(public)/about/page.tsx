@@ -1,11 +1,12 @@
 import PageHeader from "@/components/PageHeader";
+import ServiceAreaSection from "@/components/ServiceAreaSection";
 
 export default function AboutPage() {
   return (
     <div>
       <PageHeader 
         title="About Us" 
-        description="Reliant Home Health has been providing exceptional care for over 18 years, putting patients first in everything we do." 
+        description="Reliant Home Health Agency Inc. has been providing exceptional care for over 18 years, putting patients first in everything we do." 
       />
       
       {/* Our Mission & Team Photo */}
@@ -18,14 +19,22 @@ export default function AboutPage() {
                 Our mission is to provide the highest quality home health care services with compassion, respect, and clinical excellence. We believe that every patient deserves to receive care that is tailored to their unique needs and delivered in the comfort of their own home.
               </p>
               <h2 className="text-3xl font-bold text-foreground mb-6">Our Vision</h2>
-              <p className="text-lg text-foreground/70 leading-relaxed">
+              <p className="text-lg text-foreground/70 leading-relaxed mb-8">
                 We strive to be the leading provider of home health care services in our community, recognized for our commitment to patient outcomes and our dedication to supporting families through difficult times.
               </p>
+
+              {/* Credentials Box */}
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 space-y-2 text-sm">
+                <h3 className="font-bold text-base text-foreground mb-1">Agency Certification & Licensing</h3>
+                <p className="text-foreground/70"><strong>Legal Name:</strong> Reliant Home Health Agency Inc.</p>
+                <p className="text-foreground/70"><strong>National Provider Identifier (NPI):</strong> 1609011956</p>
+                <p className="text-foreground/70"><strong>OLTL Authorization:</strong> Authorized to service 49 Counties in Pennsylvania</p>
+              </div>
             </div>
             <div className="relative rounded-3xl overflow-hidden h-[450px] shadow-xl">
               <img 
                 src="/images/about_team.png" 
-                alt="Reliant Home Health Care Clinical Team"
+                alt="Reliant Home Health Agency Inc Clinical Team"
                 className="object-cover w-full h-full"
               />
               <div className="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent" />
@@ -49,7 +58,7 @@ export default function AboutPage() {
               { title: "18+ Years of Care", desc: "Serving our community with dedicated healthcare professionals since 2008." },
               { title: "Certified Clinical Staff", desc: "All our nurses and therapists are certified, licensed, and background-checked." },
               { title: "Customized Care Plans", desc: "Personalized medical and non-medical treatment plans tailored to you." },
-              { title: "24/7 Coordination", desc: "Continuous communication and coordination with your primary physicians." },
+              { title: "24/7 Support Line", desc: "Dedicated 24/7 after-hours telephone line available for urgent client care." },
               { title: "Quality & Excellence", desc: "Committed to delivering evidence-based clinical care and outstanding support." },
               { title: "Compassionate Support", desc: "Caring for patients like family, prioritizing comfort and dignity at home." }
             ].map((item, index) => (
@@ -61,6 +70,9 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
+
+      {/* Service Area Section */}
+      <ServiceAreaSection />
     </div>
   );
 }
