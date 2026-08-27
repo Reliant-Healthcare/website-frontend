@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import PageHeader from "@/components/PageHeader";
+import ServiceAreaSection from "@/components/ServiceAreaSection";
 import { contactApi } from "@/lib/api";
-import { CheckCircle2, Loader2, Phone, Mail, MapPin } from "lucide-react";
+import { CheckCircle2, Loader2, Phone, Mail, MapPin, Clock, ShieldCheck } from "lucide-react";
 
 export default function ContactPage() {
   const [form, setForm] = useState({
@@ -12,7 +13,6 @@ export default function ContactPage() {
     email: "",
     phone: "",
     subject: "",
-    category: "general_messages",
     message: "",
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -34,7 +34,7 @@ export default function ContactPage() {
     try {
       await contactApi.submit(form);
       setStatus("success");
-      setForm({ firstName: "", lastName: "", email: "", phone: "", subject: "", category: "general_messages", message: "" });
+      setForm({ firstName: "", lastName: "", email: "", phone: "", subject: "", message: "" });
     } catch (err: any) {
       setStatus("error");
       setErrorMsg(err.message || "Something went wrong. Please try again.");
@@ -58,14 +58,14 @@ export default function ContactPage() {
               <p className="text-foreground/60 text-lg mb-10 leading-relaxed">
                 Whether you need to learn more about our services, schedule a consultation, or have a question for our care team — we'd love to hear from you.
               </p>
-              <div className="space-y-8">
+              <div className="space-y-6">
                 <div className="flex gap-4 items-start">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-foreground">Our Office</h3>
-                    <p className="text-foreground/60">1401 East MacDade Boulevard<br />Folsom, Pa 19033</p>
+                    <p className="text-foreground/60">1401 East MacDade Boulevard<br />Folsom, PA 19033</p>
                   </div>
                 </div>
 
@@ -74,18 +74,10 @@ export default function ContactPage() {
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-foreground">Phone</h3>
-                    <p className="text-foreground/60">610-534-1414</p>
+                    <h3 className="text-lg font-bold text-foreground">Phone & Fax</h3>
+                    <p className="text-foreground/60"><strong>Phone:</strong> 610-534-1414</p>
+                    <p className="text-foreground/60"><strong>Fax:</strong> 610-534-1433</p>
                   </div>
-                </div>
-
-                <div className="flex gap-4 items-start">
-                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
-                    <Phone className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-foreground">Fax</h3>
-                    <p className="text-foreground/60">610-534-1433</p>
                   </div>
                 </div>
 
@@ -95,7 +87,38 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-foreground">Email</h3>
-                    <p className="text-foreground/60">info@relianthealth.com</p>
+                    <p className="text-foreground/60">
+                      <a href="mailto:Reliantagency1@gmail.com" className="text-primary hover:underline font-medium">
+                        Reliantagency1@gmail.com
+                      </a>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 items-start">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                    <Clock className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground">Hours of Operation</h3>
+                    <p className="text-foreground/70 font-medium">Monday – Friday: 9:00 AM – 5:00 PM</p>
+                    <div className="mt-2 p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs">
+                      <span className="font-bold text-primary block text-sm mb-0.5">📞 24/7 After-Hours Line Available</span>
+                      <span className="text-muted-foreground">
+                        Dedicated phone support is available after office hours (24/7) for urgent patient care. <em>*Not active during regular office hours.</em>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 items-start">
+                  <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-foreground">Agency Credentials</h3>
+                    <p className="text-foreground/60"><strong>NPI Number:</strong> 1609011956</p>
+                    <p className="text-foreground/60"><strong>OLTL Authorized Service Area:</strong> 49 Pennsylvania Counties</p>
                   </div>
                 </div>
               </div>
@@ -182,23 +205,6 @@ export default function ContactPage() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1.5">
-                        Category <span className="text-destructive">*</span>
-                      </label>
-                      <select
-                        name="category"
-                        value={form.category}
-                        onChange={handleChange}
-                        required
-                        className="w-full px-4 py-2.5 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all text-sm bg-white"
-                      >
-                        <option value="general_messages">General Messages / Inquiries</option>
-                        <option value="caregiver_questions">Caregiver Questions</option>
-                        <option value="applicant_questions">Applicant / Career Questions</option>
-                      </select>
-                    </div>
-
-                    <div>
                       <label className="block text-sm font-medium text-foreground mb-1.5">Subject</label>
                       <select
                         name="subject"
@@ -261,6 +267,8 @@ export default function ContactPage() {
           </div>
         </div>
       </section>
+
+      <ServiceAreaSection />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, HeartPulse, PersonStanding, Brain, UserCheck, Heart, MessageCircle } from "lucide-react";
+import ServiceAreaSection from "@/components/ServiceAreaSection";
 
 export default function Home() {
   return (
@@ -119,6 +120,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Service Area Section */}
+      <ServiceAreaSection />
 
       {/* CTA Section */}
       <section className="py-24 relative overflow-hidden">
