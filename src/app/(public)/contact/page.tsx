@@ -74,10 +74,9 @@ export default function ContactPage() {
                     <Phone className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-foreground">Phone & Fax</h3>
-                    <p className="text-foreground/60"><strong>Phone:</strong> 610-534-1414</p>
+                    <h3 className="text-lg font-bold text-foreground">Office Phone & Fax</h3>
+                    <p className="text-foreground/60"><strong>Office:</strong> 610-534-1414</p>
                     <p className="text-foreground/60"><strong>Fax:</strong> 610-534-1433</p>
-                  </div>
                   </div>
                 </div>
 
