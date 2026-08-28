@@ -164,7 +164,7 @@ export default function ServiceAreaSection({ title, subtitle }: { title?: string
             <div className="text-center py-12 border rounded-2xl bg-muted/20">
               <p className="text-muted-foreground font-medium mb-2">No counties match "{searchQuery}"</p>
               <p className="text-sm text-muted-foreground">
-                We service 49 counties across PA. Please call our team at <strong>610-534-1414</strong> to verify coverage for your specific location.
+                We service 49 counties across PA. Please call our office at <strong>610-534-1414</strong> to verify coverage for your specific location.
               </p>
             </div>
           )}

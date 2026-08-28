@@ -46,7 +46,7 @@ export default function Footer() {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>1401 East MacDade Boulevard</li>
               <li>Folsom, PA 19033</li>
-              <li><strong className="text-foreground">Phone:</strong> <a href="tel:6105341414" className="hover:text-primary transition-colors">610-534-1414</a></li>
+              <li><strong className="text-foreground">Office:</strong> <a href="tel:6105341414" className="hover:text-primary transition-colors">610-534-1414</a></li>
               <li><strong className="text-foreground">Fax:</strong> 610-534-1433</li>
               <li><strong className="text-foreground">Email:</strong> <a href="mailto:Reliantagency1@gmail.com" className="hover:text-primary transition-colors">Reliantagency1@gmail.com</a></li>
               <li><strong className="text-foreground">NPI Number:</strong> 1609011956</li>

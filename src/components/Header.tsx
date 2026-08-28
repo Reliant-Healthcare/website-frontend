@@ -34,6 +34,7 @@ export default function Header() {
             <span className="opacity-90">• <strong>24/7 After-Hours Line Available</strong> (For urgent client care)</span>
           </div>
           <div className="flex items-center gap-6">
+            <span><strong>Office:</strong> <a href="tel:6105341414" className="underline hover:opacity-80">610-534-1414</a></span>
             <span><strong>Email:</strong> <a href="mailto:Reliantagency1@gmail.com" className="underline hover:opacity-80">Reliantagency1@gmail.com</a></span>
             <span><strong>NPI:</strong> 1609011956</span>
           </div>
