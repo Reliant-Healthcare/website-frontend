@@ -24,8 +24,18 @@ export default function AboutPage() {
               </p>
 
               {/* Credentials Box */}
-              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 space-y-2 text-sm">
+              <div className="bg-primary/5 border border-primary/20 rounded-2xl p-6 space-y-3 text-sm">
                 <h3 className="font-bold text-base text-foreground mb-1">Agency Certification & Licensing</h3>
+                <div className="flex flex-wrap gap-2 pb-1">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary font-semibold text-xs border border-primary/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    Medicaid Certified
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary font-semibold text-xs border border-primary/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    Medicare Certified
+                  </span>
+                </div>
                 <p className="text-foreground/70"><strong>Legal Name:</strong> Reliant Home Health Agency Inc.</p>
                 <p className="text-foreground/70"><strong>National Provider Identifier (NPI):</strong> 1609011956</p>
                 <p className="text-foreground/70"><strong>OLTL Authorization:</strong> Authorized to service 49 Counties in Pennsylvania</p>

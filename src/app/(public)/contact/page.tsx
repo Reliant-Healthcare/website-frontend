@@ -116,6 +116,14 @@ export default function ContactPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-foreground">Agency Credentials</h3>
+                    <div className="flex flex-wrap gap-2 my-1.5">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold text-xs border border-primary/20">
+                        Medicaid Certified
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold text-xs border border-primary/20">
+                        Medicare Certified
+                      </span>
+                    </div>
                     <p className="text-foreground/60"><strong>NPI Number:</strong> 1609011956</p>
                     <p className="text-foreground/60"><strong>OLTL Authorized Service Area:</strong> 49 Pennsylvania Counties</p>
                   </div>
