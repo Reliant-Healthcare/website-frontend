@@ -49,6 +49,7 @@ export default function Footer() {
               <li><strong className="text-foreground">Office:</strong> <a href="tel:6105341414" className="hover:text-primary transition-colors">610-534-1414</a></li>
               <li><strong className="text-foreground">Fax:</strong> 610-534-1433</li>
               <li><strong className="text-foreground">Email:</strong> <a href="mailto:Reliantagency1@gmail.com" className="hover:text-primary transition-colors">Reliantagency1@gmail.com</a></li>
+              <li><strong className="text-foreground">Certifications:</strong> Medicaid Certified &amp; Medicare Certified</li>
               <li><strong className="text-foreground">NPI Number:</strong> 1609011956</li>
               <li className="pt-2"><strong className="text-foreground">Office Hours:</strong> 9:00 AM – 5:00 PM</li>
               <li className="text-xs text-primary font-medium bg-primary/10 p-2 rounded-md border border-primary/20">
