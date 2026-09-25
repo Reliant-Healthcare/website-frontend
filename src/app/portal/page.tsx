@@ -1156,7 +1156,7 @@ function WebFormModal({ applicationId, doc, onClose }: { applicationId: string; 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <motion.div
@@ -1164,9 +1164,9 @@ function WebFormModal({ applicationId, doc, onClose }: { applicationId: string; 
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl border my-8"
+        className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl border flex flex-col max-h-[90vh]"
       >
-        <div className="p-6 border-b sticky top-0 bg-card rounded-t-2xl z-10 flex items-center justify-between">
+        <div className="p-6 border-b bg-card rounded-t-2xl z-10 flex items-center justify-between shrink-0">
           <div>
             <h2 className="text-xl font-bold">{doc.section?.name}</h2>
             {doc.section?.description && <p className="text-sm text-muted-foreground">{doc.section.description}</p>}
@@ -1176,7 +1176,7 @@ function WebFormModal({ applicationId, doc, onClose }: { applicationId: string; 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
           {formSchema.length === 0 ? (
             <p className="text-muted-foreground text-center py-10">This form has no fields configured.</p>
           ) : (
