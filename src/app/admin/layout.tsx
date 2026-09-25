@@ -85,7 +85,7 @@ export default function AdminLayout({
     refetchInterval: 30000,
   });
 
-  const pendingCount = stats?.pendingApplications ?? 0;
+  const pendingCount = stats?.actionRequiredApplications ?? 0;
   const unreadContactCount = contactStats?.count ?? 0;
 
   const handleLogout = () => {
