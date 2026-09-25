@@ -722,7 +722,7 @@ function LMSPlayerModal({
                         />
                       ) : activeLesson.videoUrl ? (
                         <video
-                          src={`${API_URL}${activeLesson.videoUrl}`}
+                          src={activeLesson.videoUrl.startsWith('http') ? activeLesson.videoUrl : `${API_URL}${activeLesson.videoUrl}`}
                           controls
                           className="w-full h-full"
                         />
@@ -752,7 +752,7 @@ function LMSPlayerModal({
                         <p className="text-xs text-muted-foreground truncate">{activeLesson.readingFilename || "Attached document"}</p>
                       </div>
                       <a
-                        href={`${API_URL}${activeLesson.readingFileUrl}`}
+                        href={activeLesson.readingFileUrl.startsWith('http') ? activeLesson.readingFileUrl : `${API_URL}${activeLesson.readingFileUrl}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         download={activeLesson.readingFilename || "reading-material"}
@@ -1457,7 +1457,7 @@ function ApplicationCard({ application }: { application: any }) {
                       {/* Download blank form */}
                       {doc.section?.fileUrl && !doc.formData && (
                         <a
-                          href={`${API_URL}${doc.section.fileUrl}`}
+                          href={doc.section.fileUrl.startsWith('http') ? doc.section.fileUrl : `${API_URL}${doc.section.fileUrl}`}
                           download
                           className="p-2 hover:bg-muted rounded-lg transition-colors text-primary"
                           title="Download blank form"
@@ -1501,7 +1501,7 @@ function ApplicationCard({ application }: { application: any }) {
                   {/* View uploaded file */}
                   {doc.uploadedFileUrl && (
                     <a
-                      href={`${API_URL}${doc.uploadedFileUrl}`}
+                      href={doc.uploadedFileUrl.startsWith('http') ? doc.uploadedFileUrl : `${API_URL}${doc.uploadedFileUrl}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"

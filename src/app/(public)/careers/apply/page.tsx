@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2, ChevronRight, UploadCloud, Download, MessageSquare,
@@ -14,7 +14,7 @@ import { useAuthStore } from "@/lib/auth-store";
 
 export default function ApplyPage() {
   const router = useRouter();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const { user, setAuth } = useAuthStore();
   const [step, setStep] = useState(1);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const totalSteps = 3;
@@ -25,12 +25,24 @@ export default function ApplyPage() {
   } | null>(null);
 
   const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
     roleType: "skilled",
   });
+
+  useEffect(() => {
+    if (user) {
+      setFormData((prev) => ({
+        ...prev,
+        firstName: user.firstName || prev.firstName,
+        lastName: user.lastName || prev.lastName,
+        email: user.email || prev.email,
+        phone: user.phone || prev.phone,
+      }));
+    }
+  }, [user]);
 
   // Fetch default sections for the selected role type (preview on step 2)
   const { data: defaultSections = [] } = useQuery({
@@ -146,7 +158,9 @@ export default function ApplyPage() {
             {!isNewUser && (
               <div className="bg-muted/40 rounded-xl p-4 text-sm text-muted-foreground flex items-start gap-3">
                 <KeyRound className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                <p>Use your existing account credentials to log in and track this application.</p>
+                <p>
+                  {user ? "Go to your portal to track this application and submit documents." : "Use your existing account credentials to log in and track this application."}
+                </p>
               </div>
             )}
 
@@ -155,7 +169,7 @@ export default function ApplyPage() {
               <p className="text-sm font-semibold mb-3">What happens next:</p>
               <ol className="space-y-2.5">
                 {[
-                  isNewUser ? "Log in using the credentials above" : "Log in to your portal",
+                  isNewUser ? "Log in using the credentials above" : (user ? "Go to your portal" : "Log in to your portal"),
                   "Our team reviews your application",
                   "Required documents are released to your portal",
                   "Upload or fill in documents to complete your application",
@@ -173,10 +187,10 @@ export default function ApplyPage() {
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <Link
-                href="/login"
+                href={user ? "/portal" : "/login"}
                 className="flex-1 inline-flex h-11 items-center justify-center rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground shadow transition-colors hover:bg-primary/90"
               >
-                Log In to Portal →
+                {user ? "Go to Portal →" : "Log In to Portal →"}
               </Link>
               <Link
                 href="/"
