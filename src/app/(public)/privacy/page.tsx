@@ -155,10 +155,11 @@ export default function PrivacyPolicyPage() {
           <div className="bg-muted p-6 rounded-2xl border border-border/60 text-sm space-y-1 text-foreground/80 font-medium">
             <p className="font-bold text-foreground">Reliant Home Health Agency, Inc.</p>
             <p>Attn: Privacy Compliance Officer</p>
-            <p>123 Healthcare Ave, Suite 100</p>
-            <p>Cityville, ST 12345</p>
+            <p>1401 East MacDade Boulevard</p>
+            <p>Folsom, Pa 19033</p>
             <p>Email: privacy@reliant.com</p>
-            <p>Phone: (555) 123-4567</p>
+            <p>Phone: 610-534-1414</p>
+            <p>Fax: 610-534-1433</p>
           </div>
         </>
       )

@@ -78,8 +78,8 @@ export default function ApplicationDetailPage() {
   });
 
   const updateDocStatusMutation = useMutation({
-    mutationFn: ({ docId, status, adminNotes }: { docId: string; status: "APPROVED" | "REJECTED"; adminNotes?: string }) =>
-      applicationsApi.updateDocumentStatus(docId, status, adminNotes),
+    mutationFn: ({ docId, status, adminNotes, expirationDate }: { docId: string; status: "APPROVED" | "REJECTED"; adminNotes?: string; expirationDate?: string }) =>
+      applicationsApi.updateDocumentStatus(docId, status, adminNotes, expirationDate),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["application", applicationId] }),
   });
 
@@ -257,6 +257,11 @@ export default function ApplicationDetailPage() {
                         <p className="text-xs text-muted-foreground/80 font-medium">
                           Released {new Date(doc.releasedAt).toLocaleDateString()}
                           {doc.uploadedAt && ` · Submitted ${new Date(doc.uploadedAt).toLocaleDateString()}`}
+                          {doc.expirationDate && (
+                            <span className="text-amber-600 dark:text-amber-400 font-semibold ml-2">
+                              · Expires: {new Date(doc.expirationDate).toLocaleDateString()}
+                            </span>
+                          )}
                         </p>
                         {doc.status === "REJECTED" && doc.adminNotes && (
                           <div className="text-xs text-red-600 font-medium bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 mt-2 flex items-start gap-1.5 max-w-lg">
@@ -493,8 +498,8 @@ export default function ApplicationDetailPage() {
           <ReviewDocumentModal
             doc={reviewingDoc}
             onClose={() => setReviewingDoc(null)}
-            onApprove={async (notes) => {
-              await updateDocStatusMutation.mutateAsync({ docId: reviewingDoc.id, status: "APPROVED", adminNotes: notes });
+            onApprove={async (notes, expirationDate) => {
+              await updateDocStatusMutation.mutateAsync({ docId: reviewingDoc.id, status: "APPROVED", adminNotes: notes, expirationDate });
               setReviewingDoc(null);
             }}
             onReject={async (notes) => {
@@ -518,10 +523,11 @@ function ReviewDocumentModal({
 }: {
   doc: any;
   onClose: () => void;
-  onApprove: (notes: string) => Promise<void>;
+  onApprove: (notes: string, expirationDate?: string) => Promise<void>;
   onReject: (notes: string) => Promise<void>;
 }) {
   const [adminNotes, setAdminNotes] = useState(doc.adminNotes || "");
+  const [expirationDate, setExpirationDate] = useState(doc.expirationDate ? new Date(doc.expirationDate).toISOString().split('T')[0] : "");
   const [isPending, setIsPending] = useState(false);
   const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
   const formData = doc.formData || {};
@@ -531,7 +537,7 @@ function ReviewDocumentModal({
     setIsPending(true);
     try {
       if (status === "APPROVED") {
-        await onApprove(adminNotes);
+        await onApprove(adminNotes, expirationDate || undefined);
       } else {
         await onReject(adminNotes);
       }
@@ -714,6 +720,20 @@ function ReviewDocumentModal({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Expiration Date Section */}
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+              Expiration Date
+              <span className="text-xs font-normal text-muted-foreground">(Optional – for compliance tracking/reminders)</span>
+            </label>
+            <input
+              type="date"
+              value={expirationDate}
+              onChange={(e) => setExpirationDate(e.target.value)}
+              className="w-full border rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+            />
           </div>
 
           {/* Feedback & Notes Section */}

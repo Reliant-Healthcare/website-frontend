@@ -131,10 +131,15 @@ export const applicationsApi = {
       body: JSON.stringify({ formData }),
     }),
 
-  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string) =>
+  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string) =>
     apiFetch(`/applications/documents/${docId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, adminNotes }),
+      body: JSON.stringify({ status, adminNotes, expirationDate }),
+    }),
+
+  sendDocumentExpirationReminder: (docId: string) =>
+    apiFetch(`/applications/documents/${docId}/reminder`, {
+      method: 'POST',
     }),
 };
 
@@ -245,9 +250,20 @@ export const coursesApi = {
     apiFetch(`/courses/${id}/enroll`, { method: 'POST' }),
   completeLesson: (courseId: string, lessonId: string) =>
     apiFetch(`/courses/${courseId}/lessons/${lessonId}/complete`, { method: 'POST' }),
+  submitQuizAttempt: (courseId: string, quizId: string, answers: number[]) =>
+    apiFetch(`/courses/${courseId}/quizzes/${quizId}/attempt`, {
+      method: 'POST',
+      body: JSON.stringify({ answers })
+    }),
 
   getMyCertificates: () =>
     apiFetch('/courses/my-certificates'),
+
+  attest: (courseId: string, signature: string) =>
+    apiFetch(`/courses/${courseId}/attest`, {
+      method: 'POST',
+      body: JSON.stringify({ signature })
+    }),
 
   getEnrollments: (id: string) =>
     apiFetch(`/courses/${id}/enrollments`),
@@ -315,7 +331,10 @@ export const aiApi = {
     }),
 
   getAdminChatHistory: (userId: string) => apiFetch(`/ai/history/admin/${userId}`),
+
+  getAnalyticsSummary: () => apiFetch('/ai/analytics/summary'),
 };
+
 // ── Contact API ──────────────────────────────────────────────────────────────
 
 export const contactApi = {
@@ -326,6 +345,7 @@ export const contactApi = {
     email: string;
     phone?: string;
     subject?: string;
+    category?: string;
     message: string;
   }) => apiFetch('/contact', { method: 'POST', body: JSON.stringify(data) }),
 

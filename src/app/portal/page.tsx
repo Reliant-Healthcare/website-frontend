@@ -7,14 +7,15 @@ import {
   Loader2, AlertCircle, Lock, ChevronRight, LogOut, User,
   Shield, Bell, KeyRound, BookOpen, Video, Award, Settings,
   Check, Play, ArrowRight, BookOpenCheck, ChevronLeft, Printer,
-  MessageSquare, Sparkles, Bot, Send,
+  MessageSquare, Sparkles, Bot, Send, ShieldAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { applicationsApi, authApi, coursesApi, aiApi } from "@/lib/api";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import SignaturePad from "@/components/SignaturePad";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -37,15 +38,52 @@ const appStatusLabel: Record<string, { text: string; color: string }> = {
 export default function PortalPage() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"applications" | "courses" | "certificates">("applications");
   
-  // LMS Player & Certificate Modal States
-  const [activeCourseId, setActiveCourseId] = useState<string | null>(null);
-  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  // Read initial states from URL params or sessionStorage for full-application reload persistence
+  const initialTab = (searchParams?.get("tab") as "applications" | "courses" | "certificates") || 
+    (typeof window !== "undefined" ? sessionStorage.getItem("reliant_portal_tab") as any : null) || "applications";
+  const initialCourseId = searchParams?.get("courseId") || 
+    (typeof window !== "undefined" ? sessionStorage.getItem("reliant_portal_courseId") : null) || null;
+  const initialLessonId = searchParams?.get("lessonId") || 
+    (typeof window !== "undefined" ? sessionStorage.getItem("reliant_portal_lessonId") : null) || null;
+
+  const [activeTab, setActiveTabState] = useState<"applications" | "courses" | "certificates">(initialTab);
+  const [activeCourseId, setActiveCourseIdState] = useState<string | null>(initialCourseId);
+  const [activeLessonId, setActiveLessonIdState] = useState<string | null>(initialLessonId);
   const [viewingCertificate, setViewingCertificate] = useState<any | null>(null);
+
+  // Helper function for full-application state persistence sync
+  const updatePortalState = (tab: "applications" | "courses" | "certificates", courseId: string | null = null, lessonId: string | null = null) => {
+    setActiveTabState(tab);
+    setActiveCourseIdState(courseId);
+    setActiveLessonIdState(lessonId);
+
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("reliant_portal_tab", tab);
+      if (courseId) sessionStorage.setItem("reliant_portal_courseId", courseId);
+      else sessionStorage.removeItem("reliant_portal_courseId");
+      if (lessonId) sessionStorage.setItem("reliant_portal_lessonId", lessonId);
+      else sessionStorage.removeItem("reliant_portal_lessonId");
+
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", tab);
+      if (courseId) params.set("courseId", courseId);
+      else params.delete("courseId");
+      if (lessonId) params.set("lessonId", lessonId);
+      else params.delete("lessonId");
+
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, '', newUrl);
+    }
+  };
+
+  const setActiveTab = (tab: "applications" | "courses" | "certificates") => updatePortalState(tab, activeCourseId, activeLessonId);
+  const setActiveCourseId = (courseId: string | null) => updatePortalState(activeTab, courseId, null);
+  const setActiveLessonId = (lessonId: string | null) => updatePortalState(activeTab, activeCourseId, lessonId);
 
   // Query applicant applications
   const { data: applications = [], isLoading: isLoadingApps } = useQuery({
@@ -248,9 +286,20 @@ export default function PortalPage() {
                         <div key={course.id} className="bg-card border rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between">
                           <div className="p-5">
                             <div className="flex justify-between items-start mb-3">
-                              <span className="bg-primary/10 text-primary text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                                {course.category}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="bg-primary/10 text-primary text-[10px] font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                  {course.category}
+                                </span>
+                                {course.isRequired ? (
+                                  <span className="bg-rose-50 border border-rose-100 text-rose-700 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Required
+                                  </span>
+                                ) : (
+                                  <span className="bg-muted border border-border text-muted-foreground text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                                    Optional
+                                  </span>
+                                )}
+                              </div>
                               {isCompleted ? (
                                 <span className="bg-emerald-50 border border-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                                   <Check className="w-3 h-3" /> Completed
@@ -425,6 +474,10 @@ function LMSPlayerModal({
   onViewCertificate: (cert: any) => void;
 }) {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<"content" | "quiz" | "final-exam">("content");
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [quizResult, setQuizResult] = useState<any | null>(null);
+  const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
   const { data: courseDetails, isLoading } = useQuery({
     queryKey: ["portal-course-details", courseId],
@@ -456,13 +509,61 @@ function LMSPlayerModal({
 
   // Handle auto-selection of first lesson or active lesson
   useEffect(() => {
-    if (courseDetails?.lessons && courseDetails.lessons.length > 0 && !activeLessonId) {
+    if (courseDetails?.lessons && courseDetails.lessons.length > 0 && !activeLessonId && viewMode === "content") {
       // Find the first uncompleted lesson
       const completedList = courseDetails.enrollment?.completedLessons || [];
       const uncompleted = courseDetails.lessons.find((l: any) => !completedList.includes(l.id));
       onActiveLessonChange(uncompleted ? uncompleted.id : courseDetails.lessons[0].id);
     }
   }, [courseDetails, activeLessonId]);
+
+  // Reset quiz states when active lesson changes
+  useEffect(() => {
+    setAnswers({});
+    setQuizResult(null);
+    if (activeLessonId) {
+      setViewMode("content");
+    }
+  }, [activeLessonId]);
+
+  // Content Copy Protection (Anti-Theft)
+  useEffect(() => {
+    if (!courseDetails?.enableAntiTheft) return;
+
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
+        e.preventDefault();
+      }
+      if (e.key === "F12") {
+        e.preventDefault();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+      }
+      if (e.metaKey && e.altKey && (e.key.toLowerCase() === "c" || e.key.toLowerCase() === "j")) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener("contextmenu", handleContextMenu);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("contextmenu", handleContextMenu);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [courseDetails?.enableAntiTheft]);
 
   if (isLoading || !courseDetails) {
     return (
@@ -481,16 +582,27 @@ function LMSPlayerModal({
   const completedLessons: string[] = enrollment?.completedLessons || [];
 
   const activeLesson = lessons.find((l: any) => l.id === activeLessonId) || lessons[0];
+  const activeQuiz = activeLesson?.quizzes?.[0];
+  const hasQuiz = !!activeQuiz;
+
+  const mandatoryLessons = lessons.filter((l: any) => l.isRequired !== false);
+  const allMandatoryCompleted = mandatoryLessons.length === 0 || mandatoryLessons.every((l: any) => completedLessons.includes(l.id));
+  const allLessonsCompleted = lessons.length > 0 && lessons.every((l: any) => completedLessons.includes(l.id));
+  const finalQuiz = courseDetails.quizzes?.[0];
 
   const handleMarkComplete = async () => {
     if (!activeLesson) return;
-    await completeLessonMutation.mutateAsync(activeLesson.id);
-
-    // Auto-advance to next uncompleted lesson in the sequence
-    const currentIndex = lessons.findIndex((l: any) => l.id === activeLesson.id);
-    const nextLesson = lessons[currentIndex + 1];
-    if (nextLesson) {
-      onActiveLessonChange(nextLesson.id);
+    if (hasQuiz) {
+      setViewMode("quiz");
+      setAnswers({});
+      setQuizResult(null);
+    } else {
+      await completeLessonMutation.mutateAsync(activeLesson.id);
+      const currentIndex = lessons.findIndex((l: any) => l.id === activeLesson.id);
+      const nextLesson = lessons[currentIndex + 1];
+      if (nextLesson) {
+        onActiveLessonChange(nextLesson.id);
+      }
     }
   };
 
@@ -514,7 +626,9 @@ function LMSPlayerModal({
   const parsedVideoSrc = activeLesson?.videoUrl ? getEmbedVideoUrl(activeLesson.videoUrl) : null;
 
   return (
-    <div className="fixed inset-0 bg-background z-50 flex flex-col font-sans">
+    <div 
+      className="fixed inset-0 bg-background z-50 flex flex-col font-sans"
+    >
       {/* Top Banner Player Header */}
       <header className="h-16 border-b bg-card shrink-0 flex items-center justify-between px-6">
         <div className="flex items-center gap-4">
@@ -569,85 +683,285 @@ function LMSPlayerModal({
               <div className="text-center py-20">
                 <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
                 <h3 className="font-bold text-lg">Curriculum coming soon</h3>
-                <p className="text-xs text-muted-foreground mt-1">Recruiters are currently uploading video lectures and readings for this module.</p>
+                <p className="text-xs text-muted-foreground mt-1">Recruiters are currently uploading lectures for this module.</p>
               </div>
-            ) : activeLesson ? (
-              <div className="space-y-6">
-                <div>
+            ) : viewMode === "content" ? (
+              activeLesson ? (
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
+                        Topic {activeLesson.order || 1}
+                      </span>
+                      {activeLesson.isRequired === false ? (
+                        <span className="text-[10px] font-semibold bg-muted text-muted-foreground border px-2.5 py-1 rounded-full">
+                          Elective / Supplemental Study
+                        </span>
+                      ) : courseDetails?.title?.includes("OLTL") ? (
+                        <span className="text-[10px] font-extrabold bg-red-500/10 text-red-600 border border-red-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+                          <ShieldAlert className="w-3.5 h-3.5 text-red-600" /> 55 Pa. Code § 52.21 Mandatory Topic
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold bg-amber-500/10 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
+                          Mandatory Topic
+                        </span>
+                      )}
+                    </div>
+                    <h1 className="text-2xl sm:text-3xl font-extrabold mt-3 text-foreground leading-tight">{activeLesson.title}</h1>
+                  </div>
+
+                  {/* Sleek aspect ratio video frame */}
+                  {activeLesson.videoUrl && (
+                    <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border relative group">
+                      {isYouTube && parsedVideoSrc ? (
+                        <iframe
+                          src={parsedVideoSrc}
+                          className="w-full h-full"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : activeLesson.videoUrl ? (
+                        <video
+                          src={activeLesson.videoUrl.startsWith('http') ? activeLesson.videoUrl : `${API_URL}${activeLesson.videoUrl}`}
+                          controls
+                          className="w-full h-full"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-white">
+                          <p className="text-xs font-semibold">Video Unavailable</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Reading content segment */}
+                  {activeLesson.content && (
+                    <div className="pt-4 border-t border-border/80">
+                      <MarkdownRenderer content={activeLesson.content} />
+                    </div>
+                  )}
+
+                  {/* Reading material file download */}
+                  {activeLesson.readingFileUrl && (
+                    <div className="border border-primary/20 bg-primary/5 rounded-xl p-4 flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-foreground">Reading Material</p>
+                        <p className="text-xs text-muted-foreground truncate">{activeLesson.readingFilename || "Attached document"}</p>
+                      </div>
+                      <a
+                        href={activeLesson.readingFileUrl.startsWith('http') ? activeLesson.readingFileUrl : `${API_URL}${activeLesson.readingFileUrl}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={activeLesson.readingFilename || "reading-material"}
+                        className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-primary/90 transition-all shadow-sm shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download
+                      </a>
+                    </div>
+                  )}
+
+                </div>
+              ) : null
+            ) : (
+              <div className="space-y-8 p-4 max-w-2xl mx-auto">
+                <div className="border-b pb-4">
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary px-2.5 py-1 rounded-full">
-                    Topic {activeLesson.order || 1}
+                    {viewMode === "final-exam" ? "Final Exam" : "Lesson Evaluation"}
                   </span>
-                  <h1 className="text-2xl sm:text-3xl font-extrabold mt-3 text-foreground leading-tight">{activeLesson.title}</h1>
+                  <h1 className="text-xl sm:text-2xl font-black mt-3 text-foreground leading-tight">
+                    {viewMode === "final-exam" ? `${courseDetails.title} Final Examination` : `${activeLesson.title} Quiz`}
+                  </h1>
+                  <p className="text-xs text-muted-foreground mt-1.5 font-semibold">
+                    {viewMode === "final-exam" 
+                      ? "Answer all questions. Minimum passing score of 80% is required to earn your certificate." 
+                      : "Review quiz. 100% score required to mark this topic complete."}
+                  </p>
                 </div>
 
-                {/* Sleek aspect ratio video frame */}
-                {activeLesson.videoUrl && (
-                  <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-lg border relative group">
-                    {isYouTube && parsedVideoSrc ? (
-                      <iframe
-                        src={parsedVideoSrc}
-                        className="w-full h-full"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      />
-                    ) : activeLesson.videoUrl ? (
-                      <video
-                        src={activeLesson.videoUrl.startsWith('http') ? activeLesson.videoUrl : `${API_URL}${activeLesson.videoUrl}`}
-                        controls
-                        className="w-full h-full"
-                      />
+                {quizResult ? (
+                  <div className="bg-card border rounded-2xl p-6 text-center space-y-4 shadow-sm">
+                    {quizResult.passed ? (
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                          <Check className="w-6 h-6" />
+                        </div>
+                        <h3 className="font-extrabold text-lg text-emerald-800">Congratulations! You Passed!</h3>
+                        <p className="text-sm font-semibold text-muted-foreground">
+                          Score: <span className="text-foreground font-extrabold">{quizResult.score}%</span> ({quizResult.correctCount} of {quizResult.totalQuestions} correct)
+                        </p>
+                        {viewMode === "final-exam" ? (
+                          <div className="pt-2">
+                            {quizResult.requiresAttestationSignOff ? (
+                              <AttestationSignOff
+                                courseTitle={courseDetails.title}
+                                onAttestationComplete={async (signatureUrl) => {
+                                  try {
+                                    await coursesApi.attest(courseId, signatureUrl);
+                                    queryClient.invalidateQueries({ queryKey: ["my-courses"] });
+                                    queryClient.invalidateQueries({ queryKey: ["my-certificates"] });
+                                    queryClient.invalidateQueries({ queryKey: ["portal-course-details", courseId] });
+                                    setQuizResult({
+                                      ...quizResult,
+                                      requiresAttestationSignOff: false
+                                    });
+                                  } catch (err) {
+                                    alert("Failed to submit attestation signature. Please try again.");
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <>
+                                <p className="text-xs text-muted-foreground mb-4 font-medium">Your certificate has been issued and is available in your Learning Center portal.</p>
+                                <button
+                                  onClick={async () => {
+                                    const certs = await coursesApi.getMyCertificates();
+                                    const thisCert = certs.find((c: any) => c.courseId === courseId);
+                                    if (thisCert) {
+                                      onViewCertificate(thisCert);
+                                    } else {
+                                      onClose();
+                                    }
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-all mx-auto"
+                                >
+                                  <Award className="w-4 h-4" /> View My Certificate
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setViewMode("content");
+                              setQuizResult(null);
+                              setAnswers({});
+                              const currentIndex = lessons.findIndex((l: any) => l.id === activeLesson.id);
+                              const nextLesson = lessons[currentIndex + 1];
+                              if (nextLesson) {
+                                onActiveLessonChange(nextLesson.id);
+                              }
+                            }}
+                            className="bg-primary text-primary-foreground px-6 py-2.5 rounded-xl text-xs font-extrabold hover:bg-primary/90 transition-all shadow-sm mx-auto flex items-center gap-1"
+                          >
+                            Proceed to Next Topic <ArrowRight className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     ) : (
-                      <div className="flex items-center justify-center h-full text-white">
-                        <p className="text-xs font-semibold">Video Unavailable</p>
+                      <div className="space-y-3">
+                        <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+                          <XCircle className="w-6 h-6" />
+                        </div>
+                        <h3 className="font-extrabold text-lg text-rose-800">Evaluation Not Passed</h3>
+                        <p className="text-sm font-semibold text-muted-foreground">
+                          Score: <span className="text-rose-600 font-extrabold">{quizResult.score}%</span> ({quizResult.correctCount} of {quizResult.totalQuestions} correct)
+                        </p>
+                        <p className="text-xs text-muted-foreground font-semibold">Minimum score required is {viewMode === "final-exam" ? "80%" : "100%"}. You can retake the evaluation at any time.</p>
+                        <button
+                          onClick={() => {
+                            setQuizResult(null);
+                            setAnswers({});
+                          }}
+                          className="bg-rose-600 hover:bg-rose-500 text-white px-6 py-2.5 rounded-xl text-xs font-extrabold transition-all shadow-sm mx-auto"
+                        >
+                          Retry Evaluation
+                        </button>
                       </div>
                     )}
                   </div>
-                )}
+                ) : (
+                  <div className="space-y-8 pb-10">
+                    {(viewMode === "final-exam" ? finalQuiz : activeLesson.quizzes?.[0])?.questions.map((q: any, qIdx: number) => (
+                      <div key={q.id} className="space-y-3 border-b pb-6 last:border-0">
+                        <p className="font-bold text-sm text-foreground">
+                          {qIdx + 1}. {q.text}
+                        </p>
+                        <div className="grid gap-2.5">
+                          {q.options.map((opt: string, oIdx: number) => {
+                            const isSelected = answers[qIdx] === oIdx;
+                            return (
+                              <button
+                                key={opt}
+                                onClick={() => setAnswers(prev => ({ ...prev, [qIdx]: oIdx }))}
+                                className={`w-full text-left p-3.5 rounded-xl border text-xs font-semibold transition-all ${
+                                  isSelected 
+                                    ? "bg-primary/5 border-primary text-primary font-bold shadow-sm" 
+                                    : "bg-card border-border hover:bg-muted/15 text-foreground/80"
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
 
-                {/* Reading content segment */}
-                {activeLesson.content && (
-                  <article className="prose prose-sm max-w-none pt-4 text-foreground/90 leading-relaxed font-medium whitespace-pre-wrap font-sans border-t border-border/80">
-                    {activeLesson.content}
-                  </article>
-                )}
+                    <div className="flex justify-between items-center gap-4 border-t pt-6 bg-background">
+                      <button
+                        onClick={() => setViewMode("content")}
+                        className="px-4 py-2 border rounded-xl text-xs font-semibold hover:bg-muted transition-colors"
+                      >
+                        Back to Study Guide
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const currentQuiz = viewMode === "final-exam" ? finalQuiz : activeLesson.quizzes?.[0];
+                          if (!currentQuiz) return;
+                          
+                          const answeredCount = Object.keys(answers).length;
+                          if (answeredCount < currentQuiz.questions.length) {
+                            alert("Please answer all questions before submitting.");
+                            return;
+                          }
 
-                {/* Reading material file download */}
-                {activeLesson.readingFileUrl && (
-                  <div className="border border-primary/20 bg-primary/5 rounded-xl p-4 flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5 text-primary" />
+                          setSubmittingQuiz(true);
+                          try {
+                            const ansArray = Object.keys(answers).sort((a,b) => parseInt(a) - parseInt(b)).map(k => answers[parseInt(k)]);
+                            const res = await coursesApi.submitQuizAttempt(courseId, currentQuiz.id, ansArray);
+                            
+                            if (viewMode === "quiz" && res.passed) {
+                              await completeLessonMutation.mutateAsync(activeLesson.id);
+                            }
+
+                            setQuizResult(res);
+                          } catch (e) {
+                            alert("Error submitting quiz attempt. Please try again.");
+                          } finally {
+                            setSubmittingQuiz(false);
+                          }
+                        }}
+                        disabled={submittingQuiz || Object.keys(answers).length < (viewMode === "final-exam" ? finalQuiz : activeLesson.quizzes?.[0])?.questions.length}
+                        className="bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {submittingQuiz ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
+                        Submit Answers
+                      </button>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-foreground">Reading Material</p>
-                      <p className="text-xs text-muted-foreground truncate">{activeLesson.readingFilename || "Attached document"}</p>
-                    </div>
-                    <a
-                      href={activeLesson.readingFileUrl.startsWith('http') ? activeLesson.readingFileUrl : `${API_URL}${activeLesson.readingFileUrl}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download={activeLesson.readingFilename || "reading-material"}
-                      className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-extrabold hover:bg-primary/90 transition-all shadow-sm shrink-0"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Download
-                    </a>
                   </div>
                 )}
-
               </div>
-            ) : null}
+            )}
           </div>
 
           {/* Footer action completion locks */}
-          {lessons.length > 0 && activeLesson && (
-            <div className="max-w-3xl mx-auto w-full border-t pt-6 mt-8 flex justify-between items-center gap-4 bg-background">
+          {lessons.length > 0 && activeLesson && viewMode === "content" && (
+            <div className="max-w-3xl mx-auto w-full border-t pt-6 mt-8 flex justify-between items-center gap-4 bg-background px-8 pb-4">
               <div className="text-xs text-muted-foreground font-semibold">
                 {completedLessons.includes(activeLesson.id) ? (
                   <span className="text-emerald-600 flex items-center gap-1">
                     <CheckCircle2 className="w-4 h-4" /> You've read/watched this topic.
                   </span>
                 ) : (
-                  <span>Ensure you review all videos and text guides before checking off this module.</span>
+                  <span>Ensure you review all video and text guides before evaluation.</span>
                 )}
               </div>
 
@@ -655,14 +969,16 @@ function LMSPlayerModal({
                 <button
                   onClick={handleMarkComplete}
                   disabled={completeLessonMutation.isPending}
-                  className="bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-extrabold hover:bg-primary/95 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                  className="bg-primary text-primary-foreground px-6 py-3 rounded-xl text-sm font-extrabold hover:bg-primary/90 transition-all shadow-sm flex items-center gap-1.5 disabled:opacity-50"
                 >
                   {completeLessonMutation.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : hasQuiz ? (
+                    <ArrowRight className="w-4 h-4" />
                   ) : (
                     <Check className="w-4 h-4" />
                   )}
-                  Mark Topic Complete
+                  {hasQuiz ? "Take Quiz" : "Mark Topic Complete"}
                 </button>
               ) : (
                 <button
@@ -671,8 +987,11 @@ function LMSPlayerModal({
                     const nextLesson = lessons[currentIndex + 1];
                     if (nextLesson) {
                       onActiveLessonChange(nextLesson.id);
-                    } else if (progress >= 100) {
-                      alert("You have completed this entire training course! Great job!");
+                    } else if (allLessonsCompleted && finalQuiz) {
+                      onActiveLessonChange(null);
+                      setViewMode("final-exam");
+                    } else {
+                      alert("You have completed all topics! Click Final Examination in syllabus to finish.");
                     }
                   }}
                   className="bg-muted hover:bg-muted-foreground/15 border text-foreground px-6 py-3 rounded-xl text-sm font-extrabold transition-all flex items-center gap-1"
@@ -692,13 +1011,16 @@ function LMSPlayerModal({
           </div>
           <div className="flex-1 overflow-y-auto divide-y">
             {lessons.map((lesson: any, index: number) => {
-              const isSelected = lesson.id === activeLessonId;
+              const isSelected = lesson.id === activeLessonId && viewMode !== "final-exam";
               const isDone = completedLessons.includes(lesson.id);
 
               return (
                 <button
                   key={lesson.id}
-                  onClick={() => onActiveLessonChange(lesson.id)}
+                  onClick={() => {
+                    onActiveLessonChange(lesson.id);
+                    setViewMode("content");
+                  }}
                   className={`w-full text-left p-4.5 transition-all flex items-start gap-3.5 hover:bg-muted/15 ${
                     isSelected ? "bg-primary/5 text-primary border-l-4 border-primary" : "text-foreground"
                   }`}
@@ -714,19 +1036,86 @@ function LMSPlayerModal({
                       {index + 1}
                     </span>
                   )}
-                  <div className="min-w-0">
-                    <p className={`text-xs font-bold leading-snug truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
-                      {lesson.title}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className={`text-xs font-bold leading-snug ${isSelected ? "text-primary" : "text-foreground"}`}>
+                        {lesson.title}
+                      </p>
+                      {lesson.isRequired === false ? (
+                        <span className="text-[9px] font-semibold bg-muted text-muted-foreground border px-1.5 py-0.2 rounded-full">
+                          Elective
+                        </span>
+                      ) : courseDetails?.title?.includes("OLTL") ? (
+                        <span className="text-[9px] font-extrabold bg-red-500/10 text-red-600 border border-red-200 px-1.5 py-0.2 rounded-full">
+                          55 Pa. Code § 52.21 Mandatory
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-bold bg-amber-500/10 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded-full">
+                          Mandatory
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2 mt-1 text-[9px] font-semibold text-muted-foreground/80 uppercase">
                       {lesson.videoUrl && <span className="flex items-center gap-0.5"><Video className="w-3 h-3" /> Video</span>}
                       {lesson.content && <span className="flex items-center gap-0.5"><FileText className="w-3 h-3" /> Reading</span>}
                       {lesson.readingFileUrl && <span className="flex items-center gap-0.5"><Download className="w-3 h-3" /> Doc</span>}
+                      {lesson.quizzes?.length > 0 && <span className="flex items-center gap-0.5 bg-primary/5 text-primary px-1 rounded"><Award className="w-2.5 h-2.5" /> Quiz</span>}
                     </div>
                   </div>
                 </button>
               );
             })}
+
+            {finalQuiz && (
+              <button
+                disabled={!allMandatoryCompleted}
+                onClick={() => {
+                  if (allMandatoryCompleted) {
+                    onActiveLessonChange(null);
+                    setViewMode("final-exam");
+                    setAnswers({});
+                    setQuizResult(null);
+                  }
+                }}
+                className={`w-full text-left p-4.5 transition-all flex items-start gap-3.5 hover:bg-muted/15 border-t border-dashed ${
+                  viewMode === "final-exam" 
+                    ? "bg-primary/5 text-primary border-l-4 border-primary" 
+                    : !allMandatoryCompleted ? "opacity-60 cursor-not-allowed bg-muted/20" : "text-foreground"
+                }`}
+                title={!allMandatoryCompleted ? "Complete all mandatory topics to unlock the Final Examination" : "Take Final Examination"}
+              >
+                {progress >= 100 ? (
+                  <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Award className="w-3.5 h-3.5" />
+                  </span>
+                ) : !allMandatoryCompleted ? (
+                  <span className="w-5 h-5 rounded-full bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-3.5 h-3.5" />
+                  </span>
+                ) : (
+                  <span className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                    <Award className="w-3.5 h-3.5" />
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-extrabold text-foreground">
+                      Course Final Examination
+                    </p>
+                    {!allMandatoryCompleted && (
+                      <span className="text-[9px] font-bold bg-amber-500/10 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded-full flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Locked
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {!allMandatoryCompleted 
+                      ? `Complete all mandatory topics to unlock (${completedLessons.filter(id => mandatoryLessons.some((m: any) => m.id === id)).length}/${mandatoryLessons.length} finished)` 
+                      : `${finalQuiz.questions?.length || 20} evaluation questions (80% passing score)`}
+                  </p>
+                </div>
+              </button>
+            )}
           </div>
         </aside>
       </div>
@@ -777,6 +1166,9 @@ function CertificateViewModal({
                   .cert-footer { display: flex; justify-content: space-between; margin-top: 60px; padding: 0 40px; }
                   .cert-sign { border-top: 1px solid #999; width: 160px; font-size: 11px; padding-top: 8px; color: #444; }
                   .cert-meta { font-size: 10px; color: #777; margin-top: 50px; }
+                  .cert-sign-container { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 50px; max-width: 600px; margin-left: auto; margin-right: auto; gap: 40px; }
+                  .cert-sign-col { width: 140px; text-align: center; font-size: 9px; }
+                  .cert-sign-border { border-top: 1px solid #ccc; padding-top: 6px; }
                 }
               </style>
             </head>
@@ -881,12 +1273,23 @@ function CertificateViewModal({
               </div>
 
               {/* Digital clinical signatures */}
-              <div className="flex justify-between items-end gap-10 mt-14 max-w-xl mx-auto">
-                <div className="w-36 border-t border-muted/80 pt-1.5 text-center">
+              <div className="cert-sign-container flex justify-between items-end gap-10 mt-14 max-w-2xl mx-auto">
+                {cert.signature ? (
+                  <div className="cert-sign-col w-36 text-center flex flex-col items-center">
+                    <img src={cert.signature} alt="Employee Signature" className="max-h-[35px] object-contain mb-0.5" />
+                    <div className="w-full cert-sign-border border-t border-muted/80 pt-1.5">
+                      <p className="text-[9px] font-semibold text-black leading-none">{cert.user?.firstName} {cert.user?.lastName}</p>
+                      <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Employee Signature</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cert-sign-col w-36" />
+                )}
+                <div className="cert-sign-col w-36 cert-sign-border border-t border-muted/80 pt-1.5 text-center">
                   <p className="text-[9px] font-semibold font-serif text-[#0d3b66] italic mb-0.5 leading-none">Elizabeth Warren, RN</p>
                   <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Clinical Director</p>
                 </div>
-                <div className="w-36 border-t border-muted/80 pt-1.5 text-center">
+                <div className="cert-sign-col w-36 cert-sign-border border-t border-muted/80 pt-1.5 text-center">
                   <p className="text-[9px] font-semibold font-serif text-[#0d3b66] italic mb-0.5 leading-none">Arthur Pendragon</p>
                   <p className="text-[9px] text-muted-foreground font-semibold uppercase tracking-wider">Administrator</p>
                 </div>
@@ -1496,7 +1899,7 @@ function ChatbotCompanion({ activeTab }: { activeTab: "applications" | "courses"
     : "Ask about uploading forms, BLS prerequisites, TB clearances...";
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div className="fixed bottom-6 right-6 z-[60] flex flex-col items-end">
       {/* Floating Toggle Button */}
       <AnimatePresence>
         {!isOpen && (
@@ -1625,3 +2028,80 @@ function ChatbotCompanion({ activeTab }: { activeTab: "applications" | "courses"
   );
 }
 
+function AttestationSignOff({
+  courseTitle,
+  onAttestationComplete
+}: {
+  courseTitle: string;
+  onAttestationComplete: (signatureUrl: string) => Promise<void>;
+}) {
+  const [signature, setSignature] = useState<string | null>(null);
+  const [agreed, setAgreed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!signature) {
+      alert("Please draw your signature first.");
+      return;
+    }
+    if (!agreed) {
+      alert("You must agree to the attestation statement.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await onAttestationComplete(signature);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isCompliance = courseTitle.toLowerCase().includes("compulsory") || courseTitle.toLowerCase().includes("annual");
+
+  const attestationText = isCompliance 
+    ? "I attest that I completed the annual OLTL-required training and reviewed each topic in this course curriculum. I understand my responsibilities related to participant rights, incident reporting, complaint resolution, quality management, and fraud and financial abuse prevention. I agree to comply with all applicable agency policies and procedures."
+    : "I attest that I have fully read, watched, and completed all required training modules in this clinical onboarding curriculum. I certify that I completed the lessons and exams independently.";
+
+  return (
+    <div className="bg-card border rounded-2xl p-6 text-left space-y-5 shadow-sm max-w-lg mx-auto">
+      <div className="space-y-1">
+        <h3 className="font-extrabold text-lg text-primary">Required E-Signature Attestation</h3>
+        <p className="text-xs text-muted-foreground font-semibold">Sign below to confirm you completed this course and issue your certificate.</p>
+      </div>
+
+      <div className="bg-muted/15 border rounded-xl p-4 text-xs leading-relaxed text-foreground/90 font-medium">
+        {attestationText}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-foreground uppercase tracking-wider block">Draw Your Signature</label>
+        <SignaturePad value={signature || undefined} onChange={setSignature} />
+      </div>
+
+      <div className="flex items-start gap-2.5">
+        <input 
+          type="checkbox"
+          id="attestAgree"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="rounded border-gray-300 text-primary focus:ring-primary h-4.5 w-4.5 mt-0.5 cursor-pointer"
+        />
+        <label htmlFor="attestAgree" className="text-xs text-muted-foreground font-semibold leading-normal cursor-pointer select-none">
+          I attest under penalty of perjury that the signature above is my own and the information is true and correct.
+        </label>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={isSubmitting || !signature || !agreed}
+        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+      >
+        {isSubmitting ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          "Submit Attestation & Unlock Certificate"
+        )}
+      </button>
+    </div>
+  );
+}

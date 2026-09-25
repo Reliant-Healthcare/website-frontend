@@ -15,6 +15,7 @@ import {
   Briefcase, 
   FileUp, 
   Shield, 
+  ShieldCheck,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -156,6 +157,7 @@ export default function AdminLayout({
                 src="/reliant-logo.png" 
                 alt="Reliant Home Health Agency" 
                 fill
+                sizes="144px"
                 className="object-contain"
                 priority
               />
@@ -191,6 +193,7 @@ export default function AdminLayout({
           <NavLink href="/admin/contacts" icon={Mail} badge={unreadContactCount}>Contact Inbox</NavLink>
           <NavLink href="/admin/jobs" icon={Briefcase}>Jobs Management</NavLink>
           <NavLink href="/admin/documents" icon={FileUp}>Document Sections</NavLink>
+          <NavLink href="/admin/compliance" icon={ShieldCheck}>Compliance Tracking</NavLink>
 
           {isCollapsed ? (
             <hr className="my-4 border-muted/60" />
