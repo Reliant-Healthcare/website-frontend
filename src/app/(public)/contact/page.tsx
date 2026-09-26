@@ -55,9 +55,25 @@ export default function ContactPage() {
             {/* Contact Info */}
             <div>
               <h2 className="text-3xl font-bold text-foreground mb-8">Get in Touch</h2>
-              <p className="text-foreground/60 text-lg mb-10 leading-relaxed">
+              <p className="text-foreground/60 text-lg mb-8 leading-relaxed">
                 Whether you need to learn more about our services, schedule a consultation, or have a question for our care team — we'd love to hear from you.
               </p>
+              
+              <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-6 mb-10">
+                <div className="flex items-start gap-3">
+                  <ShieldCheck className="w-6 h-6 text-destructive shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-bold text-destructive text-lg mb-2">Notice of Non-Affiliation</h3>
+                    <p className="text-sm text-foreground/80 leading-relaxed mb-3">
+                      <strong>Looking for Reliant at Home Care?</strong> Please be advised that Reliant Home Health Agency is a separate, accredited clinical agency and has <strong>no affiliation</strong> with the non-medical home care company that recently ceased operations.
+                    </p>
+                    <a href="/notice" className="text-sm font-bold text-destructive hover:underline flex items-center gap-1">
+                      Read Official Statement &rarr;
+                    </a>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-6">
                 <div className="flex gap-4 items-start">
                   <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center text-primary flex-shrink-0">

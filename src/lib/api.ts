@@ -361,3 +361,12 @@ export const contactApi = {
   /** Admin — delete a message */
   remove: (id: string) => apiFetch(`/contact/${id}`, { method: 'DELETE' }),
 };
+
+// ── CMS API ──────────────────────────────────────────────────────────────────
+
+export const cmsApi = {
+  getSection: (page: string, section: string) => apiFetch(`/cms/${page}/${section}`),
+  setSection: (page: string, section: string, data: any) =>
+    apiFetch(`/cms/${page}/${section}`, { method: "POST", body: JSON.stringify(data) }),
+};
+
