@@ -22,19 +22,19 @@ export default function TopBanner() {
     // Default to true if not set yet, but obey CMS if available
     const cmsIsActive = bannerData?.content?.isActive ?? true;
     
-    if (!dismissed && cmsIsActive && !isLoading) {
+    if (!dismissed && cmsIsActive) {
       setIsVisible(true);
     } else {
       setIsVisible(false);
     }
-  }, [bannerData, isLoading]);
+  }, [bannerData]);
 
   const handleDismiss = () => {
     setIsVisible(false);
     sessionStorage.setItem("dismissed-notice-banner", "true");
   };
 
-  const defaultBannerText = "IMPORTANT: Reliant Home Health Agency is a fully accredited nursing agency. We are NOT affiliated with 'Reliant at Home Care' which recently closed operations.";
+  const defaultBannerText = "IMPORTANT: Reliant Home Health Agency Inc. is a fully accredited nursing agency. We are NOT affiliated with 'Reliant at Home Care' which recently closed operations.";
   const text = bannerData?.content?.text || defaultBannerText;
 
   return (

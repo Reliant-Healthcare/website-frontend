@@ -32,7 +32,7 @@ We are deeply sympathetic to the former employees and clients of "Reliant at Hom
             {title}
           </h1>
           <p className="text-lg md:text-xl text-primary-foreground/90 font-medium max-w-2xl mx-auto">
-            Clarification regarding Reliant Home Health Agency and the unaffiliated entity known as "Reliant at Home Care".
+            Clarification regarding Reliant Home Health Agency Inc. and the unaffiliated entity known as "Reliant at Home Care".
           </p>
         </div>
       </section>
@@ -43,13 +43,7 @@ We are deeply sympathetic to the former employees and clients of "Reliant at Hom
           <div className="bg-card rounded-2xl shadow-xl border overflow-hidden">
             <div className="p-8 md:p-12 space-y-8 text-foreground/80 leading-relaxed">
               
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-                  <p>Loading official statement...</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
+              <div className="space-y-4">
                   <p className="font-semibold text-lg text-foreground">To Our Community, Partners, and the General Public:</p>
                   
                   {body.split('\n').map((paragraph: string, idx: number) => (
@@ -65,7 +59,6 @@ We are deeply sympathetic to the former employees and clients of "Reliant at Hom
                     </p>
                   </div>
                 </div>
-              )}
 
               <div className="space-y-6 pt-6 border-t border-border">
                 <h3 className="text-2xl font-bold text-foreground">How We Are Different</h3>

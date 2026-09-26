@@ -65,7 +65,7 @@ export default function ContactPage() {
                   <div>
                     <h3 className="font-bold text-destructive text-lg mb-2">Notice of Non-Affiliation</h3>
                     <p className="text-sm text-foreground/80 leading-relaxed mb-3">
-                      <strong>Looking for Reliant at Home Care?</strong> Please be advised that Reliant Home Health Agency is a separate, accredited clinical agency and has <strong>no affiliation</strong> with the non-medical home care company that recently ceased operations.
+                      <strong>Looking for Reliant at Home Care?</strong> Please be advised that Reliant Home Health Agency Inc. is a separate, accredited clinical agency and has <strong>no affiliation</strong> with the non-medical home care company that recently ceased operations.
                     </p>
                     <a href="/notice" className="text-sm font-bold text-destructive hover:underline flex items-center gap-1">
                       Read Official Statement &rarr;

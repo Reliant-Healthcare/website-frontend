@@ -40,7 +40,7 @@ export default function CMSPage() {
     onError: (err: any) => alert(err.message || "Failed to save content"),
   });
 
-  const defaultBannerText = "IMPORTANT: Reliant Home Health Agency is a fully accredited nursing agency. We are NOT affiliated with 'Reliant at Home Care' which recently closed operations.";
+  const defaultBannerText = "IMPORTANT: Reliant Home Health Agency Inc. is a fully accredited nursing agency. We are NOT affiliated with 'Reliant at Home Care' which recently closed operations.";
   const defaultNoticeTitle = "Official Notice of Non-Affiliation";
   const defaultNoticeBody = `It has come to our attention that an entity operating under the name "Reliant at Home Care" (or "Rekiant at Home Care") has recently ceased operations. Due to the similarity in names and unauthorized use of branding elements resembling ours from over a decade ago, there has been significant confusion in the community.\n\nWe are deeply sympathetic to the former employees and clients of "Reliant at Home Care" who are currently seeking missing paychecks or disruption in services due to their closure. However, because we are an entirely different corporation, we cannot process payments, retrieve records, or assist with employment matters regarding that company.`;
 
