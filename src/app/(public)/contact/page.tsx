@@ -14,6 +14,7 @@ export default function ContactPage() {
     phone: "",
     subject: "",
     message: "",
+    website_hp: "",
   });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -34,7 +35,7 @@ export default function ContactPage() {
     try {
       await contactApi.submit(form);
       setStatus("success");
-      setForm({ firstName: "", lastName: "", email: "", phone: "", subject: "", message: "" });
+      setForm({ firstName: "", lastName: "", email: "", phone: "", subject: "", message: "", website_hp: "" });
     } catch (err: any) {
       setStatus("error");
       setErrorMsg(err.message || "Something went wrong. Please try again.");
@@ -169,6 +170,17 @@ export default function ContactPage() {
                 <>
                   <h2 className="text-2xl font-bold text-foreground mb-6">Send us a Message</h2>
                   <form className="space-y-5" onSubmit={handleSubmit}>
+                    {/* Honeypot field for automated spam bots */}
+                    <input
+                      type="text"
+                      name="website_hp"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={form.website_hp}
+                      onChange={handleChange}
+                      style={{ display: "none", position: "absolute", left: "-9999px", opacity: 0 }}
+                      aria-hidden="true"
+                    />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <div>
                         <label className="block text-sm font-medium text-foreground mb-1.5">
