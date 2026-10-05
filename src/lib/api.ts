@@ -141,6 +141,20 @@ export const applicationsApi = {
     apiFetch(`/applications/documents/${docId}/reminder`, {
       method: 'POST',
     }),
+
+  revealSsn: (docId: string) =>
+    apiFetch(`/applications/documents/${docId}/reveal-ssn`, {
+      method: 'POST',
+    }),
+
+  uploadGenericFile: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiFetch('/upload/file', {
+      method: 'POST',
+      body: formData,
+    });
+  },
 };
 
 // ── Document Sections API (Admin) ────────────────────────────────────────────
