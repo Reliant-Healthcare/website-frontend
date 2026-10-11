@@ -597,6 +597,25 @@ function LMSPlayerModal({
   }
 
   const lessons = courseDetails.lessons || [];
+  if (lessons.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-card border rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+          <h3 className="font-bold text-lg">{courseDetails.title || "Curriculum Module"}</h3>
+          <p className="text-xs text-muted-foreground">
+            This training module does not currently have any lessons assigned. Please contact the administrator.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl font-semibold text-xs hover:bg-primary/90 transition-colors"
+          >
+            Return to Learning Center
+          </button>
+        </div>
+      </div>
+    );
+  }
   const enrollment = courseDetails.enrollment;
   const progress = enrollment?.progress || 0;
   const completedLessons: string[] = enrollment?.completedLessons || [];
@@ -1575,11 +1594,11 @@ function WebFormModal({
     const initial = { ...(doc.formData || {}) };
 
     // Auto-prefill candidate details for empty fields
-    const fullName = application?.user ? `${application.user.firstName || ''} ${application.user.lastName || ''}`.trim() : (application?.personalInfo?.fullName || '');
-    const firstName = application?.user?.firstName || application?.personalInfo?.firstName || '';
-    const lastName = application?.user?.lastName || application?.personalInfo?.lastName || '';
-    const email = application?.user?.email || application?.personalInfo?.email || '';
-    const phone = application?.user?.phone || application?.personalInfo?.phone || '';
+    const firstName = (application?.user?.firstName || application?.personalInfo?.firstName || '').trim();
+    const lastName = (application?.user?.lastName || application?.personalInfo?.lastName || '').trim();
+    const fullName = `${firstName} ${lastName}`.trim() || (application?.personalInfo?.fullName || '');
+    const email = (application?.user?.email || application?.personalInfo?.email || '').trim();
+    const phone = (application?.user?.phone || application?.personalInfo?.phone || '').trim();
     const position = application?.job?.title || (application?.roleType === 'skilled' ? 'Skilled Healthcare Professional' : 'Home Health Aide / Caregiver');
     const today = new Date().toISOString().split('T')[0];
 
