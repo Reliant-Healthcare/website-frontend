@@ -479,7 +479,7 @@ function LMSPlayerModal({
   const [quizResult, setQuizResult] = useState<any | null>(null);
   const [submittingQuiz, setSubmittingQuiz] = useState(false);
 
-  const { data: courseDetails, isLoading } = useQuery({
+  const { data: courseDetails, isLoading, isError } = useQuery({
     queryKey: ["portal-course-details", courseId],
     queryFn: () => coursesApi.getOne(courseId),
   });
@@ -565,12 +565,32 @@ function LMSPlayerModal({
     };
   }, [courseDetails?.enableAntiTheft]);
 
-  if (isLoading || !courseDetails) {
+  if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center">
         <div className="text-center space-y-3">
           <Loader2 className="w-10 h-10 animate-spin text-white mx-auto" />
           <p className="text-white text-sm font-semibold">Loading curriculum player...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !courseDetails) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-card border rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+          <h3 className="font-bold text-lg">Unable to Launch Module</h3>
+          <p className="text-xs text-muted-foreground">
+            The requested course module could not be loaded or is currently unavailable.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl font-semibold text-xs hover:bg-primary/90 transition-colors"
+          >
+            Return to Learning Center
+          </button>
         </div>
       </div>
     );
@@ -1523,6 +1543,7 @@ function ApplicationCard({ application }: { application: any }) {
           <WebFormModal
             applicationId={application.id}
             doc={fillingFormDoc}
+            application={application}
             onClose={() => setFillingFormDoc(null)}
           />
         )}
@@ -1533,12 +1554,63 @@ function ApplicationCard({ application }: { application: any }) {
 
 // ── Web Form Modal ───────────────────────────────────────────────────────────
 
-function WebFormModal({ applicationId, doc, onClose }: { applicationId: string; doc: any; onClose: () => void }) {
+function WebFormModal({
+  applicationId,
+  doc,
+  application,
+  onClose
+}: {
+  applicationId: string;
+  doc: any;
+  application?: any;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
   const isReadOnly = doc.status === "UPLOADED" || doc.status === "APPROVED";
-  const [formData, setFormData] = useState<Record<string, any>>(doc.formData || {});
-  
+  const [uploadingField, setUploadingField] = useState<string | null>(null);
+
   const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
+
+  const [formData, setFormData] = useState<Record<string, any>>(() => {
+    const initial = { ...(doc.formData || {}) };
+
+    // Auto-prefill candidate details for empty fields
+    const fullName = application?.user ? `${application.user.firstName || ''} ${application.user.lastName || ''}`.trim() : (application?.personalInfo?.fullName || '');
+    const firstName = application?.user?.firstName || application?.personalInfo?.firstName || '';
+    const lastName = application?.user?.lastName || application?.personalInfo?.lastName || '';
+    const email = application?.user?.email || application?.personalInfo?.email || '';
+    const phone = application?.user?.phone || application?.personalInfo?.phone || '';
+    const position = application?.job?.title || (application?.roleType === 'skilled' ? 'Skilled Healthcare Professional' : 'Home Health Aide / Caregiver');
+    const today = new Date().toISOString().split('T')[0];
+
+    formSchema.forEach((field: any) => {
+      if (initial[field.id] === undefined || initial[field.id] === '' || initial[field.id] === null) {
+        const idLower = String(field.id).toLowerCase();
+        const labelLower = String(field.label).toLowerCase();
+
+        if (idLower.includes('position') || labelLower.includes('position applied')) {
+          initial[field.id] = position;
+        } else if (
+          idLower.includes('legal_name') || idLower.includes('full_name') || idLower.includes('applicant_name') ||
+          labelLower.includes('full legal name') || labelLower.includes('full name') || labelLower.includes('applicant name')
+        ) {
+          initial[field.id] = fullName;
+        } else if (idLower === 'first_name' || idLower === 'firstname' || labelLower.includes('first name')) {
+          initial[field.id] = firstName;
+        } else if (idLower === 'last_name' || idLower === 'lastname' || labelLower.includes('last name')) {
+          initial[field.id] = lastName;
+        } else if (idLower === 'email' || labelLower.includes('email address')) {
+          initial[field.id] = email;
+        } else if (idLower.includes('phone') || labelLower.includes('phone number')) {
+          initial[field.id] = phone;
+        } else if (field.type === 'date' && (idLower.includes('date') || labelLower.includes('date')) && !initial[field.id]) {
+          initial[field.id] = today;
+        }
+      }
+    });
+
+    return initial;
+  });
 
   const submitMutation = useMutation({
     mutationFn: (data: any) => applicationsApi.submitWebForm(applicationId, doc.sectionId, data),
@@ -1614,6 +1686,62 @@ function WebFormModal({ applicationId, doc, onClose }: { applicationId: string; 
                     onChange={(val) => setFormData({ ...formData, [field.id]: val })}
                     readOnly={isReadOnly}
                   />
+                ) : field.type === "file" || field.type === "file_upload" ? (
+                  <div className="space-y-2">
+                    {formData[field.id] ? (
+                      <div className="flex items-center justify-between p-3 border rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-xs">
+                        <div className="flex items-center gap-2 truncate">
+                          <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span className="font-semibold text-emerald-900 dark:text-emerald-300 truncate">
+                            {typeof formData[field.id] === 'string' && formData[field.id].startsWith('data:image')
+                              ? 'Uploaded Document Scan'
+                              : formData[field.id].split('/').pop() || 'Uploaded Document'}
+                          </span>
+                        </div>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, [field.id]: "" })}
+                            className="text-red-600 font-semibold hover:underline text-xs"
+                          >
+                            Remove / Replace
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          required={field.required && !isReadOnly}
+                          disabled={isReadOnly || uploadingField === field.id}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            setUploadingField(field.id);
+                            try {
+                              const res = await applicationsApi.uploadGenericFile(file);
+                              setFormData((prev) => ({ ...prev, [field.id]: res.url }));
+                            } catch (err) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setFormData((prev) => ({ ...prev, [field.id]: ev.target?.result }));
+                              };
+                              reader.readAsDataURL(file);
+                            } finally {
+                              setUploadingField(null);
+                            }
+                          }}
+                          className="w-full border rounded-lg px-4 py-2 text-sm bg-background disabled:opacity-70 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                        />
+                        {uploadingField === field.id && (
+                          <div className="absolute right-3 top-2.5 flex items-center gap-1.5 text-xs text-muted-foreground bg-background px-2">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Uploading...
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <input
                     type={field.type === "date" ? "date" : "text"}
@@ -1635,7 +1763,7 @@ function WebFormModal({ applicationId, doc, onClose }: { applicationId: string; 
             {!isReadOnly && (
               <button
                 type="submit"
-                disabled={submitMutation.isPending}
+                disabled={submitMutation.isPending || !!uploadingField}
                 className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-semibold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 {submitMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

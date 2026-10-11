@@ -529,9 +529,24 @@ function ReviewDocumentModal({
   const [adminNotes, setAdminNotes] = useState(doc.adminNotes || "");
   const [expirationDate, setExpirationDate] = useState(doc.expirationDate ? new Date(doc.expirationDate).toISOString().split('T')[0] : "");
   const [isPending, setIsPending] = useState(false);
+  const [revealedSsn, setRevealedSsn] = useState<string | null>(null);
+  const [loadingSsn, setLoadingSsn] = useState(false);
+
   const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
   const formData = doc.formData || {};
-  const isWebForm = doc.section?.type === "WEB_FORM";
+  const isWebForm = doc.section?.type === "WEB_FORM" || (doc.formData && Object.keys(doc.formData).length > 0);
+
+  const handleRevealSsn = async () => {
+    setLoadingSsn(true);
+    try {
+      const res = await applicationsApi.revealSsn(doc.id);
+      setRevealedSsn(res.ssn);
+    } catch (err: any) {
+      alert("Failed to decrypt SSN: " + (err.message || "Unauthorized"));
+    } finally {
+      setLoadingSsn(false);
+    }
+  };
 
   const handleAction = async (status: "APPROVED" | "REJECTED") => {
     setIsPending(true);
@@ -555,13 +570,21 @@ function ReviewDocumentModal({
       if (field.type === "checkbox") {
         answer = answer ? "✓ Yes / Confirmed" : "✗ No / Not checked";
       } else if (field.type === "signature") {
-        answer = answer ? `<img src="${answer}" style="max-height:50px;object-fit:contain;" />` : "(No signature provided)";
+        answer = answer ? `<img src="${answer}" style="max-height:60px;object-fit:contain;border:1px solid #ddd;padding:4px;" />` : "(No signature provided)";
+      } else if (field.type === "file" || field.type === "file_upload" || (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('data:image')))) {
+        if (typeof answer === 'string' && answer.startsWith('data:image')) {
+          answer = `<img src="${answer}" style="max-height:200px;object-fit:contain;border:1px solid #ccc;padding:4px;border-radius:4px;" />`;
+        } else if (typeof answer === 'string' && answer.startsWith('http')) {
+          answer = `<a href="${answer}" target="_blank" style="color:#0d3b66;font-weight:bold;">View Uploaded Attachment</a><br/><img src="${answer}" style="max-height:200px;object-fit:contain;margin-top:6px;border:1px solid #ccc;padding:4px;border-radius:4px;" onerror="this.style.display='none'" />`;
+        } else {
+          answer = answer || "(No attachment provided)";
+        }
       } else {
         answer = answer || "(No answer provided)";
       }
       return `
         <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#374151;width:40%;vertical-align:top">${field.label}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#374151;width:35%;vertical-align:top">${field.label}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#111827;vertical-align:top;white-space:pre-wrap">${answer}</td>
         </tr>`;
     }).join("");
@@ -570,30 +593,29 @@ function ReviewDocumentModal({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>${doc.section?.name || "Form"} – Reliant Home Health</title>
+          <title>${doc.section?.name || "Form Submission"} – Reliant Home Health</title>
           <style>
-            @media print {
-              body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
-              h1 { font-size: 20px; font-weight: 900; color: #0d3b66; margin: 0 0 4px 0; }
-              .meta { font-size: 12px; color: #6b7280; margin-bottom: 24px; }
-              table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
-              thead td { background: #0d3b66; color: white; padding: 10px 12px; font-weight: 700; }
-              tr:nth-child(even) td { background: #f9fafb; }
-              .footer { margin-top: 40px; font-size: 10px; color: #9ca3af; text-align: center; }
-            }
+            body { font-family: Arial, sans-serif; color: #111827; margin: 32px; background: #fff; }
+            h1 { font-size: 22px; font-weight: 900; color: #0d3b66; margin: 0 0 6px 0; }
+            .meta { font-size: 12px; color: #6b7280; margin-bottom: 24px; border-bottom: 2px solid #0d3b66; padding-bottom: 12px; }
+            table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+            thead td { background: #0d3b66; color: white; padding: 10px 12px; font-weight: 700; }
+            tr:nth-child(even) td { background: #f9fafb; }
+            .footer { margin-top: 40px; font-size: 10px; color: #9ca3af; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }
           </style>
         </head>
         <body>
           <h1>${doc.section?.name || "Form Submission"}</h1>
           <div class="meta">Submitted: ${submittedAt} &nbsp;·&nbsp; Status: ${doc.status} &nbsp;·&nbsp; Reliant Home Health Admin Portal</div>
           <table>
-            <thead><tr><td>Field</td><td>Applicant Answer</td></tr></thead>
+            <thead><tr><td>Field / Question</td><td>Applicant Submission / Answer</td></tr></thead>
             <tbody>${rows}</tbody>
           </table>
-          <div class="footer">Generated by Reliant Home Health Admin Portal</div>
+          <div class="footer">Reliant Home Health Administrative Document Export</div>
         </body>
       </html>`;
 
+    // Attempt direct print via iframe
     const iframe = document.createElement("iframe");
     iframe.style.cssText = "position:absolute;width:0;height:0;border:none;top:-9999px";
     document.body.appendChild(iframe);
@@ -641,11 +663,11 @@ function ReviewDocumentModal({
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {isWebForm && formSchema.length > 0 && (
+            {isWebForm && (
               <button
                 onClick={handleDownloadFormPdf}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-muted border hover:bg-muted/80 text-xs font-bold rounded-xl transition-all"
-                title="Download form answers as PDF"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold rounded-xl transition-all shadow-sm"
+                title="Download form answers as printable PDF document"
               >
                 <Download className="w-3.5 h-3.5" />
                 Download PDF
@@ -665,37 +687,83 @@ function ReviewDocumentModal({
             
             {isWebForm ? (
               <div className="space-y-4">
-                {formSchema.length === 0 ? (
-                  <p className="text-sm text-muted-foreground italic">No fields configured on this form.</p>
+                {formSchema.length === 0 && Object.keys(formData).length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No fields configured or submitted on this form.</p>
                 ) : (
-                  formSchema.map((field: any) => (
-                    <div key={field.id} className="space-y-1 pb-3 border-b border-border/60 last:border-0 last:pb-0">
-                      <p className="text-xs font-semibold text-muted-foreground">{field.label}</p>
-                      <div className="text-sm text-foreground">
-                        {field.type === "checkbox" ? (
-                          formData[field.id] ? (
-                            <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs border border-emerald-200 font-semibold">
-                              ✓ Confirmed
-                            </span>
+                  formSchema.map((field: any) => {
+                    const val = formData[field.id];
+                    return (
+                      <div key={field.id} className="space-y-1 pb-3 border-b border-border/60 last:border-0 last:pb-0">
+                        <p className="text-xs font-semibold text-muted-foreground">{field.label}</p>
+                        <div className="text-sm text-foreground">
+                          {field.type === "checkbox" ? (
+                            val ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-xs border border-emerald-200 font-semibold">
+                                ✓ Confirmed
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-muted-foreground bg-muted px-2 py-0.5 rounded text-xs border font-medium">
+                                ✗ Unchecked
+                              </span>
+                            )
+                          ) : field.type === "signature" ? (
+                            val ? (
+                              <img src={val} alt="Signature" className="max-h-[60px] object-contain border border-dashed rounded p-1 bg-white" />
+                            ) : (
+                              <span className="text-muted-foreground italic text-xs">No signature provided</span>
+                            )
+                          ) : field.type === "file" || field.type === "file_upload" || (typeof val === 'string' && (val.startsWith('http') || val.startsWith('data:image'))) ? (
+                            val ? (
+                              <div className="space-y-2 mt-1">
+                                {typeof val === 'string' && (val.startsWith('data:image') || val.match(/\.(jpg|jpeg|png|webp|gif)$/i)) ? (
+                                  <img src={val} alt="Scan Attachment" className="max-h-[160px] object-contain border rounded-lg p-1 bg-white shadow-sm" />
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <FileText className="w-4 h-4 text-primary" />
+                                    <a
+                                      href={val.startsWith('http') ? val : `${API_URL}${val}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-primary font-bold hover:underline"
+                                    >
+                                      View / Download Attachment Scan
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground italic text-xs">No file attachment provided</span>
+                            )
+                          ) : String(field.id).toLowerCase().includes("ssn") || String(field.label).toLowerCase().includes("social security") ? (
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-bold tracking-wider text-sm bg-muted/60 px-2.5 py-1 rounded border">
+                                {revealedSsn || val || "***-**-****"}
+                              </span>
+                              {revealedSsn ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded">
+                                  ✓ Decrypted & Audit Logged
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleRevealSsn}
+                                  disabled={loadingSsn}
+                                  className="inline-flex items-center gap-1 px-3 py-1 bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-300 rounded-lg text-xs font-bold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                                >
+                                  {loadingSsn ? <Loader2 className="w-3 h-3 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                                  Reveal SSN
+                                </button>
+                              )}
+                            </div>
+                          ) : val ? (
+                            <p className="whitespace-pre-wrap font-medium">{val}</p>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground bg-muted px-2 py-0.5 rounded text-xs border font-medium">
-                              ✗ Unchecked
-                            </span>
-                          )
-                        ) : field.type === "signature" ? (
-                          formData[field.id] ? (
-                            <img src={formData[field.id]} alt="Signature" className="max-h-[60px] object-contain border border-dashed rounded p-1 bg-white" />
-                          ) : (
-                            <span className="text-muted-foreground italic text-xs">No signature provided</span>
-                          )
-                        ) : formData[field.id] ? (
-                          <p className="whitespace-pre-wrap font-medium">{formData[field.id]}</p>
-                        ) : (
-                          <span className="text-muted-foreground italic text-xs">No answer provided</span>
-                        )}
+                            <span className="text-muted-foreground italic text-xs">No answer provided</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             ) : (
