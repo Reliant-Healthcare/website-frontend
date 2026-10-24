@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText, Download, Upload, CheckCircle2, Clock, XCircle,
@@ -35,7 +35,7 @@ const appStatusLabel: Record<string, { text: string; color: string }> = {
   HIRED: { text: "Hired!", color: "bg-emerald-100 text-emerald-800" },
 };
 
-export default function PortalPage() {
+function PortalContent() {
   const { user, logout } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,6 +55,24 @@ export default function PortalPage() {
   const [activeCourseId, setActiveCourseIdState] = useState<string | null>(initialCourseId);
   const [activeLessonId, setActiveLessonIdState] = useState<string | null>(initialLessonId);
   const [viewingCertificate, setViewingCertificate] = useState<any | null>(null);
+
+  // Sync state reactively when search params change (direct URL entry, back/forward navigation)
+  useEffect(() => {
+    if (!searchParams) return;
+    const urlTab = searchParams.get("tab") as "applications" | "courses" | "certificates" | null;
+    const urlCourseId = searchParams.get("courseId");
+    const urlLessonId = searchParams.get("lessonId");
+
+    if (urlTab && ["applications", "courses", "certificates"].includes(urlTab) && urlTab !== activeTab) {
+      setActiveTabState(urlTab);
+    }
+    if (urlCourseId !== activeCourseId) {
+      setActiveCourseIdState(urlCourseId);
+    }
+    if (urlLessonId !== activeLessonId) {
+      setActiveLessonIdState(urlLessonId);
+    }
+  }, [searchParams]);
 
   // Helper function for full-application state persistence sync
   const updatePortalState = (tab: "applications" | "courses" | "certificates", courseId: string | null = null, lessonId: string | null = null) => {
@@ -84,6 +102,8 @@ export default function PortalPage() {
   const setActiveTab = (tab: "applications" | "courses" | "certificates") => updatePortalState(tab, activeCourseId, activeLessonId);
   const setActiveCourseId = (courseId: string | null) => updatePortalState(activeTab, courseId, null);
   const setActiveLessonId = (lessonId: string | null) => updatePortalState(activeTab, activeCourseId, lessonId);
+  const launchCourse = (courseId: string, lessonId: string | null = null) => updatePortalState("courses", courseId, lessonId);
+  const closeCoursePlayer = () => updatePortalState(activeTab, null, null);
 
   // Query applicant applications
   const { data: applications = [], isLoading: isLoadingApps } = useQuery({
@@ -283,7 +303,11 @@ export default function PortalPage() {
                       const isCompleted = enrolled?.status === "COMPLETED";
 
                       return (
-                        <div key={course.id} className="bg-card border rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between">
+                        <div 
+                          key={course.id} 
+                          onClick={() => launchCourse(course.id)}
+                          className="bg-card border rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group hover:border-primary/40"
+                        >
                           <div className="p-5">
                             <div className="flex justify-between items-start mb-3">
                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -312,7 +336,7 @@ export default function PortalPage() {
                                 <span className="text-xs text-muted-foreground font-semibold">1.5 CEUs</span>
                               )}
                             </div>
-                            <h4 className="font-bold text-base mb-2 group-hover:text-primary line-clamp-1">{course.title}</h4>
+                            <h4 className="font-bold text-base mb-2 group-hover:text-primary transition-colors line-clamp-1">{course.title}</h4>
                             <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                               {course.description || "Comprehensive clinical guidelines and compliance training modules."}
                             </p>
@@ -332,9 +356,10 @@ export default function PortalPage() {
                               <Video className="w-3.5 h-3.5 text-primary" /> Training Lecture
                             </span>
                             <button
-                              onClick={() => {
-                                setActiveCourseId(course.id);
-                                setActiveLessonId(null);
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                launchCourse(course.id);
                               }}
                               className="text-xs text-primary font-bold flex items-center gap-1 hover:underline"
                             >
@@ -421,10 +446,11 @@ export default function PortalPage() {
           <LMSPlayerModal
             courseId={activeCourseId}
             activeLessonId={activeLessonId}
-            onActiveLessonChange={setActiveLessonId}
+            onActiveLessonChange={(lessonId) => {
+              updatePortalState(activeTab, activeCourseId, lessonId);
+            }}
             onClose={() => {
-              setActiveCourseId(null);
-              setActiveLessonId(null);
+              closeCoursePlayer();
               queryClient.invalidateQueries({ queryKey: ["my-courses"] });
               queryClient.invalidateQueries({ queryKey: ["my-certificates"] });
             }}
@@ -455,6 +481,20 @@ export default function PortalPage() {
       {/* Embedded Floating AI Chatbot Companion */}
       <ChatbotCompanion activeTab={activeTab} />
     </div>
+  );
+}
+
+export default function PortalPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[85vh] bg-muted/20 py-20 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <PortalContent />
+    </Suspense>
   );
 }
 
@@ -597,6 +637,25 @@ function LMSPlayerModal({
   }
 
   const lessons = courseDetails.lessons || [];
+  if (lessons.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="bg-card border rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+          <h3 className="font-bold text-lg">{courseDetails.title || "Curriculum Module"}</h3>
+          <p className="text-xs text-muted-foreground">
+            This training module does not currently have any lessons assigned. Please contact the administrator.
+          </p>
+          <button
+            onClick={onClose}
+            className="w-full bg-primary text-primary-foreground py-2.5 rounded-xl font-semibold text-xs hover:bg-primary/90 transition-colors"
+          >
+            Return to Learning Center
+          </button>
+        </div>
+      </div>
+    );
+  }
   const enrollment = courseDetails.enrollment;
   const progress = enrollment?.progress || 0;
   const completedLessons: string[] = enrollment?.completedLessons || [];
@@ -1575,11 +1634,11 @@ function WebFormModal({
     const initial = { ...(doc.formData || {}) };
 
     // Auto-prefill candidate details for empty fields
-    const fullName = application?.user ? `${application.user.firstName || ''} ${application.user.lastName || ''}`.trim() : (application?.personalInfo?.fullName || '');
-    const firstName = application?.user?.firstName || application?.personalInfo?.firstName || '';
-    const lastName = application?.user?.lastName || application?.personalInfo?.lastName || '';
-    const email = application?.user?.email || application?.personalInfo?.email || '';
-    const phone = application?.user?.phone || application?.personalInfo?.phone || '';
+    const firstName = (application?.user?.firstName || application?.personalInfo?.firstName || '').trim();
+    const lastName = (application?.user?.lastName || application?.personalInfo?.lastName || '').trim();
+    const fullName = `${firstName} ${lastName}`.trim() || (application?.personalInfo?.fullName || '');
+    const email = (application?.user?.email || application?.personalInfo?.email || '').trim();
+    const phone = (application?.user?.phone || application?.personalInfo?.phone || '').trim();
     const position = application?.job?.title || (application?.roleType === 'skilled' ? 'Skilled Healthcare Professional' : 'Home Health Aide / Caregiver');
     const today = new Date().toISOString().split('T')[0];
 

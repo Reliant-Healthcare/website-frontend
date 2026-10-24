@@ -328,11 +328,24 @@ export const aiApi = {
 
   getGlobalConfig: () => apiFetch('/ai/config/global'),
 
-  updateGlobalSettings: (chatbotAppEnabled?: boolean, chatbotLmsEnabled?: boolean) =>
-    apiFetch('/ai/config/global', {
+  updateGlobalSettings: (
+    settingsOrAppEnabled?: boolean | {
+      chatbotAppEnabled?: boolean;
+      chatbotLmsEnabled?: boolean;
+      applicationAlertEmail?: string;
+      applicationAlertsEnabled?: boolean;
+    },
+    chatbotLmsEnabled?: boolean,
+  ) => {
+    const body =
+      typeof settingsOrAppEnabled === 'object'
+        ? settingsOrAppEnabled
+        : { chatbotAppEnabled: settingsOrAppEnabled, chatbotLmsEnabled };
+    return apiFetch('/ai/config/global', {
       method: 'PUT',
-      body: JSON.stringify({ chatbotAppEnabled, chatbotLmsEnabled }),
-    }),
+      body: JSON.stringify(body),
+    });
+  },
 
   updateUserOverride: (
     userId: string,
@@ -374,6 +387,13 @@ export const contactApi = {
 
   /** Admin — delete a message */
   remove: (id: string) => apiFetch(`/contact/${id}`, { method: 'DELETE' }),
+
+  /** Admin — bulk delete messages */
+  bulkRemove: (ids: string[]) =>
+    apiFetch('/contact/bulk-delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
 };
 
 // ── CMS API ──────────────────────────────────────────────────────────────────

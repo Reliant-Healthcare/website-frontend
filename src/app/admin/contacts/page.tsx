@@ -43,6 +43,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function AdminContactsPage() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<ContactMessage | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -63,6 +64,17 @@ export default function AdminContactsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-contacts"] });
       setSelected(null);
+    },
+  });
+
+  const bulkRemove = useMutation({
+    mutationFn: (ids: string[]) => contactApi.bulkRemove(ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-contacts"] });
+      if (selected && selectedIds.has(selected.id)) {
+        setSelected(null);
+      }
+      setSelectedIds(new Set());
     },
   });
 
@@ -87,6 +99,34 @@ export default function AdminContactsPage() {
       m.message.toLowerCase().includes(q);
     return matchesFilter && matchesCategory && matchesSearch;
   });
+
+  const isAllFilteredSelected = filtered.length > 0 && filtered.every((m) => selectedIds.has(m.id));
+
+  const toggleSelect = (id: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (isAllFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map((m) => m.id)));
+    }
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (window.confirm(`Are you sure you want to permanently delete ${count} selected message${count > 1 ? 's' : ''}? This action cannot be undone.`)) {
+      bulkRemove.mutate(Array.from(selectedIds));
+    }
+  };
 
   const unreadCount = messages.filter((m) => !m.isRead).length;
 
@@ -151,9 +191,60 @@ export default function AdminContactsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 h-[calc(100vh-280px)]">
 
         {/* Message List */}
-        <div className="lg:col-span-2 bg-card border rounded-xl overflow-y-auto">
+        <div className="lg:col-span-2 bg-card border rounded-xl overflow-hidden flex flex-col">
+          {/* Multi-Select Toolbar */}
+          {filtered.length > 0 && (
+            <div className={`px-4 py-2.5 border-b text-xs flex items-center justify-between shrink-0 transition-colors ${
+              selectedIds.size > 0 ? "bg-primary/10 border-primary/20 text-foreground" : "bg-muted/30 text-muted-foreground"
+            }`}>
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  id="select-all-contacts"
+                  checked={isAllFilteredSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                />
+                <label htmlFor="select-all-contacts" className="cursor-pointer font-semibold select-none flex items-center gap-1.5">
+                  {selectedIds.size > 0 ? (
+                    <span className="text-primary font-bold">
+                      {selectedIds.size} of {filtered.length} selected
+                    </span>
+                  ) : (
+                    <span>Select All ({filtered.length})</span>
+                  )}
+                </label>
+              </div>
+
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedIds(new Set())}
+                    className="hover:underline font-medium text-muted-foreground hover:text-foreground text-[11px]"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    disabled={bulkRemove.isPending}
+                    className="inline-flex items-center gap-1 bg-destructive text-destructive-foreground hover:bg-destructive/90 px-2.5 py-1 rounded-md text-xs font-bold transition-all shadow-sm disabled:opacity-50"
+                  >
+                    {bulkRemove.isPending ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                    Delete ({selectedIds.size})
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {isLoading ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground gap-2">
+            <div className="flex items-center justify-center h-full text-muted-foreground gap-2 p-8">
               <Loader2 className="w-5 h-5 animate-spin" /> Loading...
             </div>
           ) : filtered.length === 0 ? (
@@ -165,43 +256,63 @@ export default function AdminContactsPage() {
               </p>
             </div>
           ) : (
-            <div className="divide-y">
-              {filtered.map((msg) => (
-                <button
-                  key={msg.id}
-                  onClick={() => handleOpen(msg)}
-                  className={`w-full text-left px-4 py-4 hover:bg-muted/50 transition-colors ${
-                    selected?.id === msg.id ? "bg-primary/5 border-l-2 border-primary" : ""
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {!msg.isRead ? (
-                        <Mail className="w-4 h-4 text-primary shrink-0" />
-                      ) : (
-                        <MailOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-                      )}
-                      <span className={`text-sm truncate ${!msg.isRead ? "font-semibold text-foreground" : "font-medium text-muted-foreground"}`}>
-                        {msg.firstName} {msg.lastName}
-                      </span>
+            <div className="divide-y overflow-y-auto flex-1">
+              {filtered.map((msg) => {
+                const isItemChecked = selectedIds.has(msg.id);
+                const isItemActive = selected?.id === msg.id;
+
+                return (
+                  <div
+                    key={msg.id}
+                    onClick={() => handleOpen(msg)}
+                    className={`w-full text-left px-4 py-3.5 hover:bg-muted/50 transition-colors flex items-start gap-3 cursor-pointer select-none ${
+                      isItemActive ? "bg-primary/5 border-l-4 border-primary" : isItemChecked ? "bg-primary/5" : ""
+                    }`}
+                  >
+                    {/* Checkbox */}
+                    <div 
+                      onClick={(e) => toggleSelect(msg.id, e)} 
+                      className="pt-0.5 shrink-0 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isItemChecked}
+                        onChange={() => {}}
+                        className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
                     </div>
-                    <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
-                      {new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    </span>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {!msg.isRead ? (
+                            <Mail className="w-4 h-4 text-primary shrink-0" />
+                          ) : (
+                            <MailOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                          )}
+                          <span className={`text-sm truncate ${!msg.isRead ? "font-semibold text-foreground" : "font-medium text-muted-foreground"}`}>
+                            {msg.firstName} {msg.lastName}
+                          </span>
+                        </div>
+                        <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0">
+                          {new Date(msg.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                      {msg.subject && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate font-medium">{msg.subject}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border ${
+                          CATEGORY_COLORS[msg.category || "general_messages"] || CATEGORY_COLORS.general_messages
+                        }`}>
+                          {CATEGORY_LABELS[msg.category || "general_messages"] || "General Messages"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{msg.message}</p>
+                    </div>
                   </div>
-                  {msg.subject && (
-                    <p className="text-xs text-muted-foreground mt-1 ml-6 truncate font-medium">{msg.subject}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-1.5 ml-6 flex-wrap">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-bold border ${
-                      CATEGORY_COLORS[msg.category || "general_messages"] || CATEGORY_COLORS.general_messages
-                    }`}>
-                      {CATEGORY_LABELS[msg.category || "general_messages"] || "General Messages"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5 ml-6 line-clamp-2">{msg.message}</p>
-                </button>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
