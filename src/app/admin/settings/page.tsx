@@ -158,19 +158,44 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-2">
-              <Mail className="w-4 h-4 text-muted-foreground" />
-              Recipient Alert Email Address
+            <label className="text-sm font-medium flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-muted-foreground" />
+                Alert Destination Emails
+              </span>
+              <span className="text-xs text-muted-foreground font-normal">Separate multiple emails with commas</span>
             </label>
             <input 
-              type="email" 
+              type="text" 
               value={applicationAlertEmail} 
               onChange={(e) => setApplicationAlertEmail(e.target.value)}
-              placeholder="e.g. hr@reliant.com, Reliantagency1@gmail.com" 
-              className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary focus:border-primary outline-none" 
+              placeholder="Reliantagency1@gmail.com, hr@relianthomehealthagencyinc.com, recruiter@reliant.com" 
+              className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary focus:border-primary outline-none font-mono text-xs sm:text-sm" 
             />
+            {applicationAlertEmail && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {applicationAlertEmail
+                  .split(/[,;\s]+/)
+                  .map((e) => e.trim())
+                  .filter(Boolean)
+                  .map((email, idx) => (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                        email.includes("@") && email.includes(".")
+                          ? "bg-primary/10 text-primary border-primary/20"
+                          : "bg-destructive/10 text-destructive border-destructive/20"
+                      }`}
+                    >
+                      <Mail className="w-3 h-3" />
+                      {email}
+                      {(!email.includes("@") || !email.includes(".")) && " (invalid format)"}
+                    </span>
+                  ))}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
-              New application alerts containing candidate details, applied role, and direct review links will be sent to this email.
+              New application alerts containing candidate details, applied role, and direct review links will be dispatched simultaneously to all configured email addresses above.
             </p>
           </div>
         </div>
