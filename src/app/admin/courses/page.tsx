@@ -446,12 +446,24 @@ export default function CoursesPage() {
                 </h2>
                 <p className="text-xs text-muted-foreground mt-0.5">Manage details and curriculum structure for this course module</p>
               </div>
-              <button 
-                onClick={() => setSelectedCourse(null)} 
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-muted-foreground hover:text-foreground" />
-              </button>
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/portal?tab=courses&courseId=${selectedCourse.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg text-xs font-bold transition-all border border-primary/20"
+                  title="Open interactive trainee player in Learning Center"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  Preview in Learning Center
+                </a>
+                <button 
+                  onClick={() => setSelectedCourse(null)} 
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+                </button>
+              </div>
             </div>
 
             {/* Navigation Tabs */}

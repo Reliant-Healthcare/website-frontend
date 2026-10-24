@@ -95,11 +95,11 @@ export default function ApplyPage() {
             <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-9 h-9 text-emerald-600" />
             </div>
-            <h2 className="text-2xl font-bold text-emerald-900 mb-2">Application Submitted!</h2>
+            <h2 className="text-2xl font-bold text-emerald-900 mb-2">Application Started!</h2>
             <p className="text-emerald-700 text-sm">
               {isNewUser
-                ? "We've created a portal account for you — log in to track your application and submit documents."
-                : "Log in to your existing portal to track this application and submit documents."}
+                ? "We've created a portal account for you — log in to track your application and complete your documents."
+                : "Log in to your existing portal to track this application and complete your documents."}
             </p>
           </div>
 
@@ -225,7 +225,7 @@ export default function ApplyPage() {
               style={{ width: `${((step - 1) / (totalSteps - 1)) * 100}%` }}
             />
 
-            {["Personal Info", "Review Documents", "Submit"].map((label, i) => {
+            {["Personal Info", "Review Documents", "Start Application"].map((label, i) => {
               const stepNumber = i + 1;
               const isActive = step === stepNumber;
               const isCompleted = step > stepNumber;
@@ -448,10 +448,10 @@ export default function ApplyPage() {
               {submitApplication.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
+                  Starting Application...
                 </>
               ) : step === totalSteps ? (
-                "Submit Application"
+                "Start Application"
               ) : (
                 <>
                   Next Step

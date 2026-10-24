@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, CheckCircle2, AlertTriangle, ShieldCheck, Cpu } from "lucide-react";
+import { Save, CheckCircle2, AlertTriangle, ShieldCheck, Cpu, Bell, Mail } from "lucide-react";
 import { aiApi } from "@/lib/api";
 
 export default function SettingsPage() {
@@ -10,9 +10,11 @@ export default function SettingsPage() {
   const [showToast, setShowToast] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // States for our dynamic switches
+  // States for our dynamic switches & notification alerts
   const [chatbotAppEnabled, setChatbotAppEnabled] = useState(true);
   const [chatbotLmsEnabled, setChatbotLmsEnabled] = useState(false);
+  const [applicationAlertEmail, setApplicationAlertEmail] = useState("Reliantagency1@gmail.com");
+  const [applicationAlertsEnabled, setApplicationAlertsEnabled] = useState(true);
 
   useEffect(() => {
     async function loadConfig() {
@@ -20,12 +22,14 @@ export default function SettingsPage() {
         setIsLoading(true);
         const res = await aiApi.getGlobalConfig();
         if (res?.status === "success" && res?.data) {
-          setChatbotAppEnabled(res.data.chatbotAppEnabled);
-          setChatbotLmsEnabled(res.data.chatbotLmsEnabled);
+          setChatbotAppEnabled(res.data.chatbotAppEnabled ?? true);
+          setChatbotLmsEnabled(res.data.chatbotLmsEnabled ?? false);
+          setApplicationAlertEmail(res.data.applicationAlertEmail || "Reliantagency1@gmail.com");
+          setApplicationAlertsEnabled(res.data.applicationAlertsEnabled ?? true);
         }
       } catch (err: any) {
-        console.error("Failed to load global AI config:", err);
-        setErrorMsg(err.message || "Failed to load global AI configurations.");
+        console.error("Failed to load global config:", err);
+        setErrorMsg(err.message || "Failed to load system configurations.");
       } finally {
         setIsLoading(false);
       }
@@ -37,14 +41,19 @@ export default function SettingsPage() {
     setIsSaving(true);
     setErrorMsg("");
     try {
-      const res = await aiApi.updateGlobalSettings(chatbotAppEnabled, chatbotLmsEnabled);
+      const res = await aiApi.updateGlobalSettings({
+        chatbotAppEnabled,
+        chatbotLmsEnabled,
+        applicationAlertEmail,
+        applicationAlertsEnabled,
+      });
       if (res?.status === "success") {
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000);
       }
     } catch (err: any) {
-      console.error("Failed to save AI config:", err);
-      setErrorMsg(err.message || "Failed to save AI settings.");
+      console.error("Failed to save settings:", err);
+      setErrorMsg(err.message || "Failed to save settings.");
     } finally {
       setIsSaving(false);
     }
@@ -113,6 +122,56 @@ export default function SettingsPage() {
                 className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-primary" 
               />
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Recruitment & Application Alerts Panel */}
+      <div className="bg-card border rounded-xl shadow-sm overflow-hidden">
+        <div className="p-6 border-b flex items-center gap-3">
+          <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-lg">
+            <Bell className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-lg">Application Alerts & Recruitment Notifications</h2>
+            <p className="text-sm text-muted-foreground">Configure the administrative recipient email that receives instant alerts when candidates apply.</p>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="flex items-start justify-between gap-4 p-4 rounded-lg border bg-slate-50/50 dark:bg-slate-900/30">
+            <div className="space-y-1">
+              <span className="text-sm font-semibold block">Enable Application Alert Emails</span>
+              <span className="text-xs text-muted-foreground block max-w-xl">
+                Automatically dispatch an email notification to the recruitment team whenever an applicant starts or submits an application on the careers portal.
+              </span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={applicationAlertsEnabled} 
+                onChange={(e) => setApplicationAlertsEnabled(e.target.checked)} 
+                className="sr-only peer" 
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-primary"></div>
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium flex items-center gap-2">
+              <Mail className="w-4 h-4 text-muted-foreground" />
+              Recipient Alert Email Address
+            </label>
+            <input 
+              type="email" 
+              value={applicationAlertEmail} 
+              onChange={(e) => setApplicationAlertEmail(e.target.value)}
+              placeholder="e.g. hr@reliant.com, Reliantagency1@gmail.com" 
+              className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background focus:ring-2 focus:ring-primary focus:border-primary outline-none" 
+            />
+            <p className="text-xs text-muted-foreground">
+              New application alerts containing candidate details, applied role, and direct review links will be sent to this email.
+            </p>
           </div>
         </div>
       </div>
