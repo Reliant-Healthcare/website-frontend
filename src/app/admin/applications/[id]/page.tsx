@@ -14,6 +14,14 @@ import { applicationsApi, documentSectionsApi, aiApi } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+const resolveMediaUrl = (url?: string | null) => {
+  if (!url || typeof url !== "string") return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  const baseUrl = API_URL.replace(/\/+$/, "");
+  const cleanPath = url.startsWith("/") ? url : `/${url}`;
+  return `${baseUrl}${cleanPath}`;
+};
+
 const statusConfig: Record<string, { color: string; icon: any; label: string }> = {
   PENDING: { color: "bg-amber-100 text-amber-800 border-amber-200", icon: Clock, label: "Pending" },
   UPLOADED: { color: "bg-blue-100 text-blue-800 border-blue-200", icon: Upload, label: "Uploaded" },
@@ -571,11 +579,12 @@ function ReviewDocumentModal({
         answer = answer ? "✓ Yes / Confirmed" : "✗ No / Not checked";
       } else if (field.type === "signature") {
         answer = answer ? `<img src="${answer}" style="max-height:60px;object-fit:contain;border:1px solid #ddd;padding:4px;" />` : "(No signature provided)";
-      } else if (field.type === "file" || field.type === "file_upload" || (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('data:image')))) {
+      } else if (field.type === "file" || field.type === "file_upload" || (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('data:image') || answer.startsWith('/uploads')))) {
         if (typeof answer === 'string' && answer.startsWith('data:image')) {
           answer = `<img src="${answer}" style="max-height:200px;object-fit:contain;border:1px solid #ccc;padding:4px;border-radius:4px;" />`;
-        } else if (typeof answer === 'string' && answer.startsWith('http')) {
-          answer = `<a href="${answer}" target="_blank" style="color:#0d3b66;font-weight:bold;">View Uploaded Attachment</a><br/><img src="${answer}" style="max-height:200px;object-fit:contain;margin-top:6px;border:1px solid #ccc;padding:4px;border-radius:4px;" onerror="this.style.display='none'" />`;
+        } else if (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('/uploads') || answer.match(/\.(jpg|jpeg|png|webp|gif|pdf)$/i))) {
+          const fileUrl = resolveMediaUrl(answer);
+          answer = `<a href="${fileUrl}" target="_blank" style="color:#0d3b66;font-weight:bold;">View Uploaded Attachment</a><br/><img src="${fileUrl}" style="max-height:200px;object-fit:contain;margin-top:6px;border:1px solid #ccc;padding:4px;border-radius:4px;" onerror="this.style.display='none'" />`;
         } else {
           answer = answer || "(No attachment provided)";
         }
@@ -712,16 +721,20 @@ function ReviewDocumentModal({
                             ) : (
                               <span className="text-muted-foreground italic text-xs">No signature provided</span>
                             )
-                          ) : field.type === "file" || field.type === "file_upload" || (typeof val === 'string' && (val.startsWith('http') || val.startsWith('data:image'))) ? (
+                          ) : field.type === "file" || field.type === "file_upload" || (typeof val === 'string' && (val.startsWith('http') || val.startsWith('data:image') || val.startsWith('/uploads'))) ? (
                             val ? (
                               <div className="space-y-2 mt-1">
-                                {typeof val === 'string' && (val.startsWith('data:image') || val.match(/\.(jpg|jpeg|png|webp|gif)$/i)) ? (
-                                  <img src={val} alt="Scan Attachment" className="max-h-[160px] object-contain border rounded-lg p-1 bg-white shadow-sm" />
+                                {typeof val === 'string' && val.startsWith('***-**-') ? (
+                                  <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded p-2">
+                                    Attachment preview unavailable (Invalid attachment format)
+                                  </div>
+                                ) : typeof val === 'string' && (val.startsWith('data:image') || val.match(/\.(jpg|jpeg|png|webp|gif)$/i)) ? (
+                                  <img src={resolveMediaUrl(val)} alt="Scan Attachment" className="max-h-[160px] object-contain border rounded-lg p-1 bg-white shadow-sm" />
                                 ) : (
                                   <div className="flex items-center gap-2">
                                     <FileText className="w-4 h-4 text-primary" />
                                     <a
-                                      href={val.startsWith('http') ? val : `${API_URL}${val}`}
+                                      href={resolveMediaUrl(val)}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-xs text-primary font-bold hover:underline"
@@ -734,7 +747,7 @@ function ReviewDocumentModal({
                             ) : (
                               <span className="text-muted-foreground italic text-xs">No file attachment provided</span>
                             )
-                          ) : String(field.id).toLowerCase().includes("ssn") || String(field.label).toLowerCase().includes("social security") ? (
+                          ) : !['file', 'file_upload'].includes(field.type) && (String(field.id).toLowerCase() === "ssn" || (!String(field.id).toLowerCase().includes("card") && (String(field.id).toLowerCase().includes("ssn") || String(field.label).toLowerCase().includes("social security")))) ? (
                             <div className="flex items-center gap-3">
                               <span className="font-mono font-bold tracking-wider text-sm bg-muted/60 px-2.5 py-1 rounded border">
                                 {revealedSsn || val || "***-**-****"}
@@ -775,7 +788,7 @@ function ReviewDocumentModal({
                 </div>
                 {doc.uploadedFileUrl ? (
                   <a
-                    href={doc.uploadedFileUrl.startsWith('http') ? doc.uploadedFileUrl : `${API_URL}${doc.uploadedFileUrl}`}
+                    href={resolveMediaUrl(doc.uploadedFileUrl)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-sm hover:bg-primary/95 transition-all mt-1"
