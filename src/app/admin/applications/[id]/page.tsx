@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, FileText, CheckCircle2, XCircle, Clock, Upload,
   Loader2, Download, Send, AlertCircle, User, Mail, Phone, Briefcase,
-  Calendar, MoreVertical, Eye, MessageSquare, History, Cpu,
+  Calendar, MoreVertical, Eye, MessageSquare, History, Cpu, ZoomIn, ExternalLink, X,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -539,6 +539,7 @@ function ReviewDocumentModal({
   const [isPending, setIsPending] = useState(false);
   const [revealedSsn, setRevealedSsn] = useState<string | null>(null);
   const [loadingSsn, setLoadingSsn] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; title: string } | null>(null);
 
   const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
   const formData = doc.formData || {};
@@ -728,11 +729,27 @@ function ReviewDocumentModal({
                                   <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 rounded p-2">
                                     Attachment preview unavailable (Invalid attachment format)
                                   </div>
-                                ) : typeof val === 'string' && (val.startsWith('data:image') || val.match(/\.(jpg|jpeg|png|webp|gif)$/i)) ? (
-                                  <img src={resolveMediaUrl(val)} alt="Scan Attachment" className="max-h-[160px] object-contain border rounded-lg p-1 bg-white shadow-sm" />
+                                ) : typeof val === 'string' && (val.startsWith('data:image') || val.match(/\.(jpg|jpeg|png|webp|gif)($|\?)/i)) ? (
+                                  <div className="inline-block mt-1">
+                                    <div
+                                      onClick={() => setLightboxImage({ url: resolveMediaUrl(val), title: field.label || "Attachment Scan" })}
+                                      className="group relative cursor-pointer overflow-hidden rounded-xl border border-border/80 bg-white dark:bg-card hover:border-primary hover:shadow-md transition-all inline-block"
+                                      title="Click to expand scan and download"
+                                    >
+                                      <img
+                                        src={resolveMediaUrl(val)}
+                                        alt={field.label || "Scan Attachment"}
+                                        className="max-h-[160px] object-contain p-2 transition-transform duration-200 group-hover:scale-105"
+                                      />
+                                      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white text-xs font-semibold backdrop-blur-[1px] p-2 text-center">
+                                        <ZoomIn className="w-5 h-5 text-white" />
+                                        <span className="text-[11px] bg-black/60 px-2 py-0.5 rounded-full font-medium">Click to expand & download</span>
+                                      </div>
+                                    </div>
+                                  </div>
                                 ) : (
-                                  <div className="flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-primary" />
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <FileText className="w-4 h-4 text-primary shrink-0" />
                                     <a
                                       href={resolveMediaUrl(val)}
                                       target="_blank"
@@ -783,19 +800,37 @@ function ReviewDocumentModal({
               <div className="flex flex-col items-center justify-center py-6 space-y-3">
                 <FileText className="w-12 h-12 text-primary" />
                 <div className="text-center">
-                  <p className="font-semibold text-sm">Uploaded PDF Attachment</p>
+                  <p className="font-semibold text-sm">Uploaded Document Attachment</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Click below to open and review this document</p>
                 </div>
                 {doc.uploadedFileUrl ? (
-                  <a
-                    href={resolveMediaUrl(doc.uploadedFileUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-sm hover:bg-primary/95 transition-all mt-1"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Open Uploaded File
-                  </a>
+                  typeof doc.uploadedFileUrl === 'string' && (doc.uploadedFileUrl.startsWith('data:image') || doc.uploadedFileUrl.match(/\.(jpg|jpeg|png|webp|gif)($|\?)/i)) ? (
+                    <div
+                      onClick={() => setLightboxImage({ url: resolveMediaUrl(doc.uploadedFileUrl), title: doc.section?.name || "Uploaded Attachment" })}
+                      className="group relative cursor-pointer overflow-hidden rounded-xl border border-border/80 bg-white dark:bg-card hover:border-primary hover:shadow-md transition-all mt-2"
+                      title="Click to expand scan and download"
+                    >
+                      <img
+                        src={resolveMediaUrl(doc.uploadedFileUrl)}
+                        alt={doc.section?.name || "Uploaded Attachment"}
+                        className="max-h-[220px] object-contain p-2 transition-transform duration-200 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 text-white text-xs font-semibold backdrop-blur-[1px] p-2 text-center">
+                        <ZoomIn className="w-5 h-5 text-white" />
+                        <span className="text-[11px] bg-black/60 px-2.5 py-0.5 rounded-full font-medium">Click to expand & download scan</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <a
+                      href={resolveMediaUrl(doc.uploadedFileUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl shadow-sm hover:bg-primary/95 transition-all mt-1"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Open Uploaded File
+                    </a>
+                  )
                 ) : (
                   <span className="text-xs text-destructive font-semibold">No file attachment found</span>
                 )}
@@ -863,6 +898,128 @@ function ReviewDocumentModal({
           </div>
         </div>
       </motion.div>
+
+      {/* High-Resolution Click-to-Expand Image Lightbox Modal */}
+      <AnimatePresence>
+        {lightboxImage && (
+          <ImageLightboxModal
+            image={lightboxImage}
+            onClose={() => setLightboxImage(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ── High-Resolution Image Lightbox Modal ─────────────────────────────────────
+
+function ImageLightboxModal({
+  image,
+  onClose,
+}: {
+  image: { url: string; title: string };
+  onClose: () => void;
+}) {
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(image.url);
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      const cleanName = `${image.title.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "document_scan"}.jpg`;
+      a.download = cleanName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(blobUrl);
+      document.body.removeChild(a);
+    } catch {
+      window.open(image.url, "_blank");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/85 backdrop-blur-md z-[70] flex flex-col items-center justify-between p-4 sm:p-6"
+      onClick={onClose}
+    >
+      {/* Top Bar */}
+      <div
+        className="w-full max-w-5xl flex items-center justify-between gap-4 py-2.5 px-5 bg-card/90 dark:bg-card/90 border border-border/60 rounded-2xl backdrop-blur-md z-10 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <FileText className="w-4 h-4 text-primary shrink-0" />
+          <h3 className="text-sm sm:text-base font-bold truncate text-foreground">{image.title}</h3>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50"
+            title="Download full scan"
+          >
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Download Scan
+          </button>
+          <a
+            href={image.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-muted text-foreground text-xs font-semibold rounded-xl hover:bg-muted/80 transition-all border"
+            title="Open full image in new tab"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Open New Tab</span>
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground transition-all ml-1"
+            title="Close (Esc)"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Image Container */}
+      <div
+        className="flex-1 flex items-center justify-center p-2 sm:p-4 max-w-5xl w-full overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <motion.img
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          src={image.url}
+          alt={image.title}
+          className="max-h-[75vh] max-w-full object-contain rounded-2xl shadow-2xl border border-white/10 bg-black/40"
+        />
+      </div>
+
+      {/* Footer Hint */}
+      <div className="text-[11px] text-white/60 pb-1">
+        Click outside or press <kbd className="px-1.5 py-0.5 bg-white/15 rounded text-[10px] text-white/80 font-mono">ESC</kbd> to close
+      </div>
     </motion.div>
   );
 }
