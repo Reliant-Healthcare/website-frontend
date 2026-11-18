@@ -7,7 +7,7 @@ import {
   Loader2, AlertCircle, Lock, ChevronRight, LogOut, User,
   Shield, Bell, KeyRound, BookOpen, Video, Award, Settings,
   Check, Play, ArrowRight, BookOpenCheck, ChevronLeft, Printer,
-  MessageSquare, Sparkles, Bot, Send, ShieldAlert,
+  MessageSquare, Sparkles, Bot, Send, ShieldAlert, Plus, Trash2,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -1520,13 +1520,25 @@ function ApplicationCard({ application }: { application: any }) {
                         </button>
                       )}
                       {doc.formData && (doc.status === "UPLOADED" || doc.status === "APPROVED") && (
-                        <button
-                          onClick={() => setFillingFormDoc(doc)}
-                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
-                          title="View your answers"
-                        >
-                          <FileText className="w-4 h-4 text-primary" />
-                        </button>
+                        <>
+                          <button
+                            onClick={() => setFillingFormDoc(doc)}
+                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+                            title="View your answers"
+                          >
+                            <FileText className="w-4 h-4 text-primary" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const cleanName = `${(doc.section?.name || 'official-document').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-signed.pdf`;
+                              await applicationsApi.downloadOfficialPdf(doc.id, cleanName);
+                            }}
+                            className="p-2 hover:bg-muted rounded-lg transition-colors text-primary hover:text-primary/80"
+                            title="Download official signed and stamped PDF"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </>
                   )}
@@ -1627,43 +1639,429 @@ function WebFormModal({
   const queryClient = useQueryClient();
   const isReadOnly = doc.status === "UPLOADED" || doc.status === "APPROVED";
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
 
   const [formData, setFormData] = useState<Record<string, any>>(() => {
     const initial = { ...(doc.formData || {}) };
 
-    // Auto-prefill candidate details for empty fields
-    const firstName = (application?.user?.firstName || application?.personalInfo?.firstName || '').trim();
-    const lastName = (application?.user?.lastName || application?.personalInfo?.lastName || '').trim();
-    const fullName = `${firstName} ${lastName}`.trim() || (application?.personalInfo?.fullName || '');
-    const email = (application?.user?.email || application?.personalInfo?.email || '').trim();
-    const phone = (application?.user?.phone || application?.personalInfo?.phone || '').trim();
-    const position = application?.job?.title || (application?.roleType === 'skilled' ? 'Skilled Healthcare Professional' : 'Home Health Aide / Caregiver');
+    // ── Smart Cross-Form Candidate Identity Extraction (Strict Whitelist) ────
+    // Only extracts the applicant's genuine personal identity and demographics.
+    // Explicitly prevents extracting references, emergency contacts, or physician data.
+    const candidateIdentity: Record<string, any> = {};
+    const DEMO_WHITELIST = new Set([
+      'first_name', 'firstname', 'last_name', 'lastname', 'legal_name', 'full_name',
+      'middle_name', 'middle_initial', 'suffix',
+      'email', 'applicant_email', 'employee_email',
+      'phone', 'telephone', 'telephone_mobile', 'telephone_home', 'cell_phone', 'mobile_phone', 'applicant_phone',
+      'address_street', 'street_address', 'address', 'current_address', 'home_address',
+      'address_line2', 'apt_number',
+      'address_city', 'city', 'county',
+      'address_state', 'state',
+      'address_zip', 'zip_code', 'zip',
+      'dob', 'date_of_birth', 'gender', 'race',
+      'ssn', 'social_security_number',
+      'dl_number', 'driver_license_num', 'dl_state', 'driver_license_state'
+    ]);
+
+    if (Array.isArray(application?.documents)) {
+      application.documents.forEach((d: any) => {
+        if (d.formData && typeof d.formData === 'object') {
+          Object.keys(d.formData).forEach((k) => {
+            const kLower = k.toLowerCase();
+            const val = d.formData[k];
+            // Only extract candidate fields; skip masked SSN values (containing ***) or empty values
+            if (
+              DEMO_WHITELIST.has(kLower) &&
+              typeof val === 'string' &&
+              val.trim() &&
+              !val.includes('***') &&
+              !candidateIdentity[kLower]
+            ) {
+              candidateIdentity[kLower] = val.trim();
+            }
+          });
+        }
+      });
+    }
+
+    const firstName = (
+      initial.first_name ||
+      initial.firstname ||
+      candidateIdentity.first_name ||
+      candidateIdentity.firstname ||
+      application?.personalInfo?.firstName ||
+      application?.user?.firstName ||
+      ''
+    ).trim();
+
+    const lastName = (
+      initial.last_name ||
+      initial.lastname ||
+      candidateIdentity.last_name ||
+      candidateIdentity.lastname ||
+      application?.personalInfo?.lastName ||
+      application?.user?.lastName ||
+      ''
+    ).trim();
+
+    const middleName = (
+      initial.middle_name ||
+      initial.middle_initial ||
+      candidateIdentity.middle_name ||
+      candidateIdentity.middle_initial ||
+      application?.personalInfo?.middleName ||
+      ''
+    ).trim();
+
+    const suffix = (
+      initial.suffix ||
+      candidateIdentity.suffix ||
+      application?.personalInfo?.suffix ||
+      ''
+    ).trim();
+
+    const fullName = (
+      initial.legal_name ||
+      initial.full_name ||
+      initial.applicant_name ||
+      candidateIdentity.legal_name ||
+      candidateIdentity.full_name ||
+      application?.personalInfo?.fullName ||
+      `${firstName} ${middleName ? middleName + ' ' : ''}${lastName}`.trim() ||
+      ''
+    ).trim();
+
+    const email = (
+      initial.email ||
+      initial.applicant_email ||
+      initial.employee_email ||
+      candidateIdentity.email ||
+      candidateIdentity.applicant_email ||
+      candidateIdentity.employee_email ||
+      application?.personalInfo?.email ||
+      application?.user?.email ||
+      ''
+    ).trim();
+
+    const phone = (
+      initial.phone ||
+      initial.telephone ||
+      initial.telephone_mobile ||
+      initial.cell_phone ||
+      initial.mobile_phone ||
+      initial.applicant_phone ||
+      candidateIdentity.phone ||
+      candidateIdentity.telephone ||
+      candidateIdentity.telephone_mobile ||
+      candidateIdentity.cell_phone ||
+      candidateIdentity.mobile_phone ||
+      candidateIdentity.applicant_phone ||
+      application?.personalInfo?.phone ||
+      application?.user?.phone ||
+      ''
+    ).trim();
+
+    const telephoneHome = (
+      initial.telephone_home ||
+      candidateIdentity.telephone_home ||
+      application?.personalInfo?.telephoneHome ||
+      ''
+    ).trim();
+
+    const street = (
+      initial.address_street ||
+      initial.street_address ||
+      initial.address ||
+      initial.current_address ||
+      candidateIdentity.address_street ||
+      candidateIdentity.street_address ||
+      candidateIdentity.address ||
+      candidateIdentity.current_address ||
+      application?.personalInfo?.address ||
+      application?.personalInfo?.address_street ||
+      ''
+    ).trim();
+
+    const addressLine2 = (
+      initial.address_line2 ||
+      initial.apt_number ||
+      candidateIdentity.address_line2 ||
+      candidateIdentity.apt_number ||
+      application?.personalInfo?.addressLine2 ||
+      ''
+    ).trim();
+
+    const city = (
+      initial.address_city ||
+      initial.city ||
+      candidateIdentity.address_city ||
+      candidateIdentity.city ||
+      application?.personalInfo?.city ||
+      application?.personalInfo?.address_city ||
+      ''
+    ).trim();
+
+    const state = (
+      initial.address_state ||
+      initial.state ||
+      candidateIdentity.address_state ||
+      candidateIdentity.state ||
+      application?.personalInfo?.state ||
+      'PA'
+    ).trim();
+
+    const zip = (
+      initial.address_zip ||
+      initial.zip_code ||
+      initial.zip ||
+      candidateIdentity.address_zip ||
+      candidateIdentity.zip_code ||
+      candidateIdentity.zip ||
+      application?.personalInfo?.zip ||
+      application?.personalInfo?.address_zip ||
+      ''
+    ).trim();
+
+    const county = (
+      initial.county ||
+      candidateIdentity.county ||
+      application?.personalInfo?.county ||
+      ''
+    ).trim();
+
+    const dob = (
+      initial.dob ||
+      initial.date_of_birth ||
+      candidateIdentity.dob ||
+      candidateIdentity.date_of_birth ||
+      application?.personalInfo?.dob ||
+      ''
+    ).trim();
+
+    const rawSsn = (
+      initial.ssn ||
+      initial.social_security_number ||
+      candidateIdentity.ssn ||
+      candidateIdentity.social_security_number ||
+      application?.personalInfo?.ssn ||
+      ''
+    ).trim();
+    const cleanSsn = rawSsn && !rawSsn.includes('***') ? rawSsn : '';
+
+    const gender = (
+      initial.gender ||
+      candidateIdentity.gender ||
+      application?.personalInfo?.gender ||
+      ''
+    ).trim();
+
+    const race = (
+      initial.race ||
+      candidateIdentity.race ||
+      application?.personalInfo?.race ||
+      ''
+    ).trim();
+
+    const dlNumber = (
+      initial.dl_number ||
+      initial.driver_license_num ||
+      candidateIdentity.dl_number ||
+      candidateIdentity.driver_license_num ||
+      application?.personalInfo?.dlNumber ||
+      ''
+    ).trim();
+
+    const dlState = (
+      initial.dl_state ||
+      initial.driver_license_state ||
+      candidateIdentity.dl_state ||
+      candidateIdentity.driver_license_state ||
+      application?.personalInfo?.dlState ||
+      'PA'
+    ).trim();
+
+    const positionApplied = application?.job?.title && application?.job?.title !== 'General Application'
+      ? application.job.title
+      : (application?.roleType === 'skilled' ? 'Skilled Healthcare Professional' : 'Direct Care Worker / Home Health Aide');
+    
     const today = new Date().toISOString().split('T')[0];
 
-    formSchema.forEach((field: any) => {
-      if (initial[field.id] === undefined || initial[field.id] === '' || initial[field.id] === null) {
-        const idLower = String(field.id).toLowerCase();
-        const labelLower = String(field.label).toLowerCase();
+    // Compute estimated age from DOB if available
+    let age = (initial.age || candidateIdentity.age || '').trim();
+    if (!age && dob) {
+      const birth = new Date(dob);
+      if (!isNaN(birth.getTime())) {
+        const diff = Date.now() - birth.getTime();
+        age = String(Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25)));
+      }
+    }
 
-        if (idLower.includes('position') || labelLower.includes('position applied')) {
-          initial[field.id] = position;
-        } else if (
-          idLower.includes('legal_name') || idLower.includes('full_name') || idLower.includes('applicant_name') ||
-          labelLower.includes('full legal name') || labelLower.includes('full name') || labelLower.includes('applicant name')
+    formSchema.forEach((field: any) => {
+      const id = field.id;
+      const idLower = String(id).toLowerCase();
+      const labelLower = String(field.label).toLowerCase();
+
+      // Check repeaters initialization
+      if (field.type === 'repeater_names') {
+        if (!Array.isArray(initial[id]) || initial[id].length === 0) {
+          initial[id] = [{ first: '', middle: '', last: '', suffix: '' }];
+        }
+        return;
+      }
+      if (field.type === 'repeater_addresses') {
+        if (!Array.isArray(initial[id]) || initial[id].length === 0) {
+          initial[id] = [{ street: street || '', city: city || '', state: state || 'PA', zip: zip || '' }];
+        }
+        return;
+      }
+      if (field.type === 'repeater_household') {
+        if (!Array.isArray(initial[id]) || initial[id].length === 0) {
+          initial[id] = [{ name: '', relationship: 'Parent', gender: 'Female', age: '' }];
+        }
+        return;
+      }
+
+      // ── STRICT CONTEXTUAL BLACKLIST ───────────────────────────────────────────
+      // If the field belongs to a third party (references, emergency contacts, physicians,
+      // prior employers, specific event dates, or banking), NEVER prefill with candidate personal data!
+      const isThirdPartyOrContextual =
+        idLower.startsWith('ref') ||
+        idLower.includes('reference') ||
+        idLower.startsWith('primary_') ||
+        idLower.startsWith('secondary_') ||
+        idLower.includes('emergency') ||
+        idLower.startsWith('physician') ||
+        idLower.startsWith('doctor') ||
+        idLower.startsWith('clinic') ||
+        idLower.startsWith('medical') ||
+        idLower.startsWith('hospital') ||
+        idLower.startsWith('employer') ||
+        idLower.startsWith('company') ||
+        idLower.startsWith('supervisor') ||
+        idLower.startsWith('trainer') ||
+        idLower.startsWith('facilitator') ||
+        idLower.startsWith('bank') ||
+        idLower.startsWith('routing') ||
+        idLower.startsWith('account') ||
+        idLower.startsWith('deposit') ||
+        idLower.includes('prev_') ||
+        idLower.includes('previous_') ||
+        idLower.includes('workmens_') ||
+        idLower.includes('applied_before') ||
+        idLower.includes('cpr_') ||
+        idLower === 'position_desired' ||
+        idLower === 'position_held' ||
+        idLower.includes('license_number') ||
+        idLower.includes('license_expiration');
+
+      if (initial[id] === undefined || initial[id] === '' || initial[id] === null) {
+        if (isThirdPartyOrContextual) {
+          // Do not pollute third-party / contextual fields
+          return;
+        }
+
+        // Job / Position
+        if (idLower === 'position' || idLower === 'position_applied_for' || idLower === 'job_title' || labelLower === 'position applied for') {
+          initial[id] = positionApplied;
+        }
+        // Full / Legal Name
+        else if (
+          idLower === 'legal_name' || idLower === 'full_name' || idLower === 'applicant_name' ||
+          (idLower === 'employee_name' && !idLower.includes('referral') && !idLower.includes('trainer') && !idLower.includes('facilitator'))
         ) {
-          initial[field.id] = fullName;
-        } else if (idLower === 'first_name' || idLower === 'firstname' || labelLower.includes('first name')) {
-          initial[field.id] = firstName;
-        } else if (idLower === 'last_name' || idLower === 'lastname' || labelLower.includes('last name')) {
-          initial[field.id] = lastName;
-        } else if (idLower === 'email' || labelLower.includes('email address')) {
-          initial[field.id] = email;
-        } else if (idLower.includes('phone') || labelLower.includes('phone number')) {
-          initial[field.id] = phone;
-        } else if (field.type === 'date' && (idLower.includes('date') || labelLower.includes('date')) && !initial[field.id]) {
-          initial[field.id] = today;
+          initial[id] = fullName;
+        }
+        // First Name
+        else if (idLower === 'first_name' || idLower === 'firstname') {
+          initial[id] = firstName;
+        }
+        // Last Name
+        else if (idLower === 'last_name' || idLower === 'lastname') {
+          initial[id] = lastName;
+        }
+        // Middle Name / Initial
+        else if (idLower === 'middle_name' || idLower === 'middle_initial') {
+          initial[id] = middleName;
+        }
+        // Suffix
+        else if (idLower === 'suffix') {
+          initial[id] = suffix;
+        }
+        // Email
+        else if (idLower === 'email' || idLower === 'applicant_email' || idLower === 'employee_email') {
+          initial[id] = email;
+        }
+        // Phone / Mobile
+        else if (
+          idLower === 'phone' || idLower === 'telephone' || idLower === 'telephone_mobile' ||
+          idLower === 'cell_phone' || idLower === 'mobile_phone' || idLower === 'applicant_phone'
+        ) {
+          initial[id] = phone;
+        }
+        // Home Phone
+        else if (idLower === 'telephone_home') {
+          initial[id] = telephoneHome;
+        }
+        // Street Address
+        else if (idLower === 'address_street' || idLower === 'street_address' || idLower === 'address' || idLower === 'current_address') {
+          initial[id] = street;
+        }
+        // Address Line 2 / Apt Number
+        else if (idLower === 'address_line2' || idLower === 'apt_number') {
+          initial[id] = addressLine2;
+        }
+        // City
+        else if (idLower === 'address_city' || idLower === 'city') {
+          initial[id] = city;
+        }
+        // State
+        else if (idLower === 'address_state' || idLower === 'state') {
+          initial[id] = state;
+        }
+        // Zip
+        else if (idLower === 'address_zip' || idLower === 'zip_code' || idLower === 'zip') {
+          initial[id] = zip;
+        }
+        // County
+        else if (idLower === 'county') {
+          initial[id] = county;
+        }
+        // Date of Birth
+        else if (idLower === 'dob' || idLower === 'date_of_birth') {
+          initial[id] = dob;
+        }
+        // Age
+        else if (idLower === 'age') {
+          initial[id] = age;
+        }
+        // Social Security Number
+        else if (idLower === 'ssn' || idLower === 'social_security_number') {
+          initial[id] = cleanSsn;
+        }
+        // Gender
+        else if (idLower === 'gender') {
+          initial[id] = gender;
+        }
+        // Race / Ethnicity
+        else if (idLower === 'race') {
+          initial[id] = race;
+        }
+        // Driver's License Number
+        else if (idLower === 'dl_number' || idLower === 'driver_license_num') {
+          initial[id] = dlNumber;
+        }
+        // Driver's License State
+        else if (idLower === 'dl_state' || idLower === 'driver_license_state') {
+          initial[id] = dlState;
+        }
+        // Signature & Attestation Dates
+        else if (
+          field.type === 'date' &&
+          (idLower.includes('signature_date') || idLower.includes('attest_date') || idLower.includes('date_signed') || idLower.includes('training_date') || idLower === 'today_date')
+        ) {
+          initial[id] = today;
         }
       }
     });
@@ -1714,111 +2112,516 @@ function WebFormModal({
           {formSchema.length === 0 ? (
             <p className="text-muted-foreground text-center py-10">This form has no fields configured.</p>
           ) : (
-            formSchema.map((field: any) => (
-              <div key={field.id} className="space-y-2">
-                <label className="text-sm font-medium flex items-center gap-1">
-                  {field.label} {field.required && !isReadOnly && <span className="text-red-500">*</span>}
-                </label>
-                {field.type === "textarea" ? (
-                  <textarea
-                    required={field.required && !isReadOnly}
-                    disabled={isReadOnly}
-                    value={formData[field.id] || ""}
-                    onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                    className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background min-h-[100px] disabled:opacity-70"
-                  />
-                ) : field.type === "checkbox" ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      required={field.required && !isReadOnly}
-                      disabled={isReadOnly}
-                      checked={!!formData[field.id]}
-                      onChange={(e) => setFormData({ ...formData, [field.id]: e.target.checked })}
-                      className="w-5 h-5 rounded border-gray-300 disabled:opacity-70"
-                    />
-                    <span className="text-sm">Yes / Confirm</span>
+            formSchema.map((field: any) => {
+              // ── Header / Section Banner ──────────────────────────────────
+              if (field.type === "section_header") {
+                return (
+                  <div key={field.id} className="pt-4 pb-1 border-b border-border/80">
+                    <h3 className="text-sm font-bold tracking-wide uppercase text-primary">
+                      {field.label}
+                    </h3>
                   </div>
-                ) : field.type === "signature" ? (
-                  <SignaturePad
-                    value={formData[field.id] || ""}
-                    onChange={(val) => setFormData({ ...formData, [field.id]: val })}
-                    readOnly={isReadOnly}
-                  />
-                ) : field.type === "file" || field.type === "file_upload" ? (
-                  <div className="space-y-2">
-                    {formData[field.id] ? (
-                      <div className="flex items-center justify-between p-3 border rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-xs">
-                        <div className="flex items-center gap-2 truncate">
-                          <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span className="font-semibold text-emerald-900 dark:text-emerald-300 truncate">
-                            {typeof formData[field.id] === 'string' && formData[field.id].startsWith('data:image')
-                              ? 'Uploaded Document Scan'
-                              : formData[field.id].split('/').pop() || 'Uploaded Document'}
-                          </span>
-                        </div>
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => setFormData({ ...formData, [field.id]: "" })}
-                            className="text-red-600 font-semibold hover:underline text-xs"
-                          >
-                            Remove / Replace
-                          </button>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <input
-                          type="file"
-                          accept="image/*,.pdf"
-                          required={field.required && !isReadOnly}
-                          disabled={isReadOnly || uploadingField === field.id}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            setUploadingField(field.id);
-                            try {
-                              const res = await applicationsApi.uploadGenericFile(file);
-                              setFormData((prev) => ({ ...prev, [field.id]: res.url }));
-                            } catch (err) {
-                              const reader = new FileReader();
-                              reader.onload = (ev) => {
-                                setFormData((prev) => ({ ...prev, [field.id]: ev.target?.result }));
-                              };
-                              reader.readAsDataURL(file);
-                            } finally {
-                              setUploadingField(null);
-                            }
-                          }}
-                          className="w-full border rounded-lg px-4 py-2 text-sm bg-background disabled:opacity-70 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
-                        />
-                        {uploadingField === field.id && (
-                          <div className="absolute right-3 top-2.5 flex items-center gap-1.5 text-xs text-muted-foreground bg-background px-2">
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Uploading...
+                );
+              }
+
+              // ── Instruction Banner ─────────────────────────────────────────
+              if (field.type === "instruction") {
+                return (
+                  <div
+                    key={field.id}
+                    className="p-3.5 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 text-xs text-blue-950 dark:text-blue-200 leading-relaxed flex items-start gap-2.5"
+                  >
+                    <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <span>{field.label}</span>
+                  </div>
+                );
+              }
+
+              // ── Tip Banner ─────────────────────────────────────────────────
+              if (field.type === "tip") {
+                return (
+                  <div
+                    key={field.id}
+                    className="p-3.5 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 text-xs text-emerald-950 dark:text-emerald-200 leading-relaxed flex items-start gap-2.5"
+                  >
+                    <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                    <span>{field.label}</span>
+                  </div>
+                );
+              }
+
+              // ── Caution / Perjury Banner ───────────────────────────────────
+              if (field.type === "caution") {
+                return (
+                  <div
+                    key={field.id}
+                    className="p-3.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-xs text-amber-950 dark:text-amber-200 leading-relaxed flex items-start gap-2.5"
+                  >
+                    <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <span className="font-medium">{field.label}</span>
+                  </div>
+                );
+              }
+
+              // ── Repeater: Previous Names ───────────────────────────────────
+              if (field.type === "repeater_names") {
+                const list = Array.isArray(formData[field.id])
+                  ? formData[field.id]
+                  : [{ first: '', middle: '', last: '', suffix: '' }];
+
+                return (
+                  <div key={field.id} className="space-y-3 pt-2">
+                    <label className="text-sm font-semibold flex items-center justify-between">
+                      <span>{field.label}</span>
+                      <span className="text-xs text-muted-foreground font-normal">Max 5 names</span>
+                    </label>
+                    <div className="space-y-3">
+                      {list.map((item: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-muted/40 rounded-xl border border-border/80 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                            <span>Name Entry #{idx + 1}</span>
+                            {list.length > 1 && !isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = list.filter((_: any, i: number) => i !== idx);
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="text-red-500 hover:text-red-700 flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" /> Remove
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              placeholder="First Name"
+                              value={item.first || ''}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], first: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-xs bg-background"
+                            />
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              placeholder="Middle"
+                              value={item.middle || ''}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], middle: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-xs bg-background"
+                            />
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              placeholder="Last Name"
+                              value={item.last || ''}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], last: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-xs bg-background"
+                            />
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              placeholder="Suffix (e.g. Jr)"
+                              value={item.suffix || ''}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], suffix: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-xs bg-background"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {!isReadOnly && list.length < 5 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            [field.id]: [...list, { first: '', middle: '', last: '', suffix: '' }],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline pt-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Another Previous Name / Alias
+                      </button>
                     )}
                   </div>
-                ) : (
-                  <input
-                    type={field.type === "date" ? "date" : "text"}
-                    required={field.required && !isReadOnly}
-                    disabled={isReadOnly}
-                    value={formData[field.id] || ""}
-                    onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                    className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background disabled:opacity-70"
-                  />
-                )}
-              </div>
-            ))
+                );
+              }
+
+              // ── Repeater: Previous Addresses ───────────────────────────────
+              if (field.type === "repeater_addresses") {
+                const list = Array.isArray(formData[field.id])
+                  ? formData[field.id]
+                  : [{ street: '', city: '', state: 'PA', zip: '' }];
+
+                return (
+                  <div key={field.id} className="space-y-3 pt-2">
+                    <label className="text-sm font-semibold flex items-center justify-between">
+                      <span>{field.label}</span>
+                      <span className="text-xs text-muted-foreground font-normal">Max 8 addresses</span>
+                    </label>
+                    <div className="space-y-3">
+                      {list.map((item: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-muted/40 rounded-xl border border-border/80 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                            <span>Address #{idx + 1}</span>
+                            {list.length > 1 && !isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = list.filter((_: any, i: number) => i !== idx);
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="text-red-500 hover:text-red-700 flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" /> Remove
+                              </button>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              placeholder="Street Address (e.g. 123 Main St, Apt 2)"
+                              value={item.street || ''}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], street: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="w-full border rounded-lg px-3 py-2 text-xs bg-background"
+                            />
+                            <div className="grid grid-cols-3 gap-2">
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                placeholder="City"
+                                value={item.city || ''}
+                                onChange={(e) => {
+                                  const updated = [...list];
+                                  updated[idx] = { ...updated[idx], city: e.target.value };
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="border rounded-lg px-3 py-2 text-xs bg-background"
+                              />
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                placeholder="State"
+                                value={item.state || 'PA'}
+                                onChange={(e) => {
+                                  const updated = [...list];
+                                  updated[idx] = { ...updated[idx], state: e.target.value };
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="border rounded-lg px-3 py-2 text-xs bg-background"
+                              />
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                placeholder="ZIP"
+                                value={item.zip || ''}
+                                onChange={(e) => {
+                                  const updated = [...list];
+                                  updated[idx] = { ...updated[idx], zip: e.target.value };
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="border rounded-lg px-3 py-2 text-xs bg-background"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {!isReadOnly && list.length < 8 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            [field.id]: [...list, { street: '', city: '', state: 'PA', zip: '' }],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline pt-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Another Previous Address
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              // ── Repeater: Household Members ────────────────────────────────
+              if (field.type === "repeater_household") {
+                const list = Array.isArray(formData[field.id])
+                  ? formData[field.id]
+                  : [{ name: '', relationship: 'Parent', gender: 'Female', age: '' }];
+
+                return (
+                  <div key={field.id} className="space-y-3 pt-2">
+                    <label className="text-sm font-semibold flex items-center justify-between">
+                      <span>{field.label}</span>
+                      <span className="text-xs text-muted-foreground font-normal">Max 10 members</span>
+                    </label>
+                    <div className="space-y-3">
+                      {list.map((item: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-muted/40 rounded-xl border border-border/80 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+                            <span>Household Member #{idx + 1}</span>
+                            {list.length > 1 && !isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = list.filter((_: any, i: number) => i !== idx);
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="text-red-500 hover:text-red-700 flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" /> Remove
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              disabled={isReadOnly}
+                              placeholder="Full Name (First, Middle, Last)"
+                              value={item.name || ''}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], name: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="sm:col-span-2 border rounded-lg px-3 py-2 text-xs bg-background"
+                            />
+                            <select
+                              disabled={isReadOnly}
+                              value={item.relationship || 'Parent'}
+                              onChange={(e) => {
+                                const updated = [...list];
+                                updated[idx] = { ...updated[idx], relationship: e.target.value };
+                                setFormData({ ...formData, [field.id]: updated });
+                              }}
+                              className="border rounded-lg px-3 py-2 text-xs bg-background"
+                            >
+                              <option value="Parent">Parent</option>
+                              <option value="Guardian">Guardian</option>
+                              <option value="Person who raised you">Person who raised you</option>
+                              <option value="Spouse">Spouse</option>
+                              <option value="Child">Child</option>
+                              <option value="Present / Roommate">Present / Roommate</option>
+                              <option value="Other">Other</option>
+                            </select>
+                            <div className="flex gap-2">
+                              <select
+                                disabled={isReadOnly}
+                                value={item.gender || 'Female'}
+                                onChange={(e) => {
+                                  const updated = [...list];
+                                  updated[idx] = { ...updated[idx], gender: e.target.value };
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="border rounded-lg px-2 py-2 text-xs bg-background flex-1"
+                              >
+                                <option value="Female">Female</option>
+                                <option value="Male">Male</option>
+                              </select>
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                placeholder="Age"
+                                value={item.age || ''}
+                                onChange={(e) => {
+                                  const updated = [...list];
+                                  updated[idx] = { ...updated[idx], age: e.target.value };
+                                  setFormData({ ...formData, [field.id]: updated });
+                                }}
+                                className="border rounded-lg px-2 py-2 text-xs bg-background w-14 text-center"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {!isReadOnly && list.length < 10 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            [field.id]: [...list, { name: '', relationship: 'Parent', gender: 'Female', age: '' }],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline pt-1"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Household Member
+                      </button>
+                    )}
+                  </div>
+                );
+              }
+
+              // ── Standard Inputs ───────────────────────────────────────────
+              return (
+                <div key={field.id} className="space-y-2">
+                  <label className="text-sm font-medium flex items-center gap-1">
+                    {field.label} {field.required && !isReadOnly && <span className="text-red-500">*</span>}
+                  </label>
+
+                  {field.type === "select" ? (
+                    <select
+                      required={field.required && !isReadOnly}
+                      disabled={isReadOnly}
+                      value={formData[field.id] || ""}
+                      onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                      className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background disabled:opacity-70 text-sm"
+                    >
+                      <option value="">-- Please Select --</option>
+                      {field.options?.map((opt: string) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.type === "textarea" ? (
+                    <textarea
+                      required={field.required && !isReadOnly}
+                      disabled={isReadOnly}
+                      value={formData[field.id] || ""}
+                      onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                      className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background min-h-[100px] disabled:opacity-70 text-sm"
+                    />
+                  ) : field.type === "checkbox" ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        required={field.required && !isReadOnly}
+                        disabled={isReadOnly}
+                        checked={!!formData[field.id]}
+                        onChange={(e) => setFormData({ ...formData, [field.id]: e.target.checked })}
+                        className="w-5 h-5 rounded border-gray-300 disabled:opacity-70"
+                      />
+                      <span className="text-sm">Yes / Confirm</span>
+                    </div>
+                  ) : field.type === "signature" ? (
+                    <SignaturePad
+                      value={formData[field.id] || ""}
+                      onChange={(val) => setFormData({ ...formData, [field.id]: val })}
+                      readOnly={isReadOnly}
+                    />
+                  ) : field.type === "file" || field.type === "file_upload" ? (
+                    <div className="space-y-2">
+                      {formData[field.id] ? (
+                        <div className="flex items-center justify-between p-3 border rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-xs">
+                          <div className="flex items-center gap-2 truncate">
+                            <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="font-semibold text-emerald-900 dark:text-emerald-300 truncate">
+                              {typeof formData[field.id] === 'string' && formData[field.id].startsWith('data:image')
+                                ? 'Uploaded Document Scan'
+                                : formData[field.id].split('/').pop() || 'Uploaded Document'}
+                            </span>
+                          </div>
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => setFormData({ ...formData, [field.id]: "" })}
+                              className="text-red-600 font-semibold hover:underline text-xs"
+                            >
+                              Remove / Replace
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*,.pdf"
+                            required={field.required && !isReadOnly}
+                            disabled={isReadOnly || uploadingField === field.id}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setUploadingField(field.id);
+                              try {
+                                const res = await applicationsApi.uploadGenericFile(file);
+                                setFormData((prev) => ({ ...prev, [field.id]: res.url }));
+                              } catch (err) {
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  setFormData((prev) => ({ ...prev, [field.id]: ev.target?.result }));
+                                };
+                                reader.readAsDataURL(file);
+                              } finally {
+                                setUploadingField(null);
+                              }
+                            }}
+                            className="w-full border rounded-lg px-4 py-2 text-sm bg-background disabled:opacity-70 file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
+                          />
+                          {uploadingField === field.id && (
+                            <div className="absolute right-3 top-2.5 flex items-center gap-1.5 text-xs text-muted-foreground bg-background px-2">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Uploading...
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type={field.type === "date" ? "date" : "text"}
+                      required={field.required && !isReadOnly}
+                      disabled={isReadOnly}
+                      value={formData[field.id] || ""}
+                      onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                      className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background disabled:opacity-70 text-sm"
+                    />
+                  )}
+                </div>
+              );
+            })
           )}
 
           <div className="flex gap-3 pt-4 border-t">
             <button type="button" onClick={onClose} className="flex-1 border py-3 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">
               {isReadOnly ? "Close" : "Cancel"}
             </button>
+            {isReadOnly && (
+              <button
+                type="button"
+                disabled={downloadingPdf}
+                onClick={async () => {
+                  setDownloadingPdf(true);
+                  try {
+                    const cleanName = `${(doc.section?.name || 'official-document').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-signed.pdf`;
+                    await applicationsApi.downloadOfficialPdf(doc.id, cleanName);
+                  } catch (err: any) {
+                    console.error(err);
+                    alert(`Failed to download official PDF: ${err?.message || 'Unknown error'}`);
+                  } finally {
+                    setDownloadingPdf(false);
+                  }
+                }}
+                className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-semibold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+              >
+                {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Download Official PDF
+              </button>
+            )}
             {!isReadOnly && (
               <button
                 type="submit"

@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, FileText, CheckCircle2, XCircle, Clock, Upload,
   Loader2, Download, Send, AlertCircle, User, Mail, Phone, Briefcase,
-  Calendar, MoreVertical, Eye, MessageSquare, History, Cpu, ZoomIn, ExternalLink, X,
+  Calendar, MoreVertical, Eye, MessageSquare, History, Cpu, ZoomIn, ExternalLink, X, ShieldCheck, RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -41,8 +41,10 @@ const appStatusConfig: Record<string, string> = {
 export default function ApplicationDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const applicationId = params.id as string;
+  const targetDocId = searchParams.get("docId") || searchParams.get("sectionId");
   const [showReleaseModal, setShowReleaseModal] = useState(false);
   const [reviewingDoc, setReviewingDoc] = useState<any | null>(null);
 
@@ -62,6 +64,22 @@ export default function ApplicationDetailPage() {
       setChatbotLmsOverride(application.user.chatbotLmsOverride || "INHERIT");
     }
   }, [application]);
+
+  // Auto-open target document modal if navigated from Candidate 360 inspect button
+  useEffect(() => {
+    if (application?.documents && targetDocId && !reviewingDoc) {
+      const match = application.documents.find(
+        (d: any) => d.id === targetDocId || d.sectionId === targetDocId
+      );
+      if (match) {
+        setReviewingDoc(match);
+        setTimeout(() => {
+          const el = document.getElementById(`doc-${match.id}`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 200);
+      }
+    }
+  }, [application, targetDocId]);
 
   // Load chat transcript history for audit
   const userId = application?.user?.id;
@@ -138,7 +156,16 @@ export default function ApplicationDetailPage() {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {(application.user?.id || application.userId) && (
+            <Link
+              href={`/admin/candidates/${application.user?.id || application.userId}`}
+              className="flex items-center gap-1.5 border border-input bg-background hover:bg-accent text-foreground px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            >
+              <User className="w-4 h-4 text-primary" />
+              View 360
+            </Link>
+          )}
           <button
             onClick={() => setShowReleaseModal(true)}
             className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
@@ -245,7 +272,15 @@ export default function ApplicationDetailPage() {
                 const isActionable = doc.status !== "PENDING";
 
                 return (
-                  <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-5 hover:bg-muted/20 transition-colors">
+                  <div
+                    key={doc.id}
+                    id={`doc-${doc.id}`}
+                    className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-6 py-5 hover:bg-muted/20 transition-all rounded-xl ${
+                      targetDocId === doc.id || targetDocId === doc.sectionId
+                        ? "bg-primary/5 ring-2 ring-primary/40 border border-primary/20 shadow-sm"
+                        : ""
+                    }`}
+                  >
                     <div className="flex items-start gap-4">
                       <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 border mt-0.5">
                         <FileText className="w-5 h-5 text-primary" />
@@ -290,7 +325,7 @@ export default function ApplicationDetailPage() {
                           className="inline-flex items-center gap-1.5 px-4 py-2 border bg-background hover:bg-muted text-xs font-bold rounded-xl text-foreground transition-all shadow-sm"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          Review & Action
+                          {doc.status === "APPROVED" ? "Manage / View" : doc.status === "REJECTED" ? "Review Rejection" : "Review & Action"}
                         </button>
                       ) : (
                         <span className="text-xs font-medium text-muted-foreground italic px-2">
@@ -572,72 +607,161 @@ function ReviewDocumentModal({
     }
   };
 
-  const handleDownloadFormPdf = () => {
-    const submittedAt = doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString() : "N/A";
-    const rows = formSchema.map((field: any) => {
-      let answer = formData[field.id];
-      if (field.type === "checkbox") {
-        answer = answer ? "✓ Yes / Confirmed" : "✗ No / Not checked";
-      } else if (field.type === "signature") {
-        answer = answer ? `<img src="${answer}" style="max-height:60px;object-fit:contain;border:1px solid #ddd;padding:4px;" />` : "(No signature provided)";
-      } else if (field.type === "file" || field.type === "file_upload" || (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('data:image') || answer.startsWith('/uploads')))) {
-        if (typeof answer === 'string' && answer.startsWith('data:image')) {
-          answer = `<img src="${answer}" style="max-height:200px;object-fit:contain;border:1px solid #ccc;padding:4px;border-radius:4px;" />`;
-        } else if (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('/uploads') || answer.match(/\.(jpg|jpeg|png|webp|gif|pdf)$/i))) {
-          const fileUrl = resolveMediaUrl(answer);
-          answer = `<a href="${fileUrl}" target="_blank" style="color:#0d3b66;font-weight:bold;">View Uploaded Attachment</a><br/><img src="${fileUrl}" style="max-height:200px;object-fit:contain;margin-top:6px;border:1px solid #ccc;padding:4px;border-radius:4px;" onerror="this.style.display='none'" />`;
-        } else {
-          answer = answer || "(No attachment provided)";
-        }
-      } else {
-        answer = answer || "(No answer provided)";
+  const isI9 = (doc.section?.name || "").toLowerCase().includes("i-9") || doc.section?.code === "I9";
+  const isRef = (doc.section?.name || "").toLowerCase().includes("reference") || doc.section?.code === "REF";
+  const [showEmployerVerification, setShowEmployerVerification] = useState(false);
+  const [i9EmployerData, setI9EmployerData] = useState({
+    listA_title: "",
+    listA_issuing: "",
+    listA_number: "",
+    listA_expiration: "",
+    listB_title: "",
+    listB_issuing: "",
+    listB_number: "",
+    listB_expiration: "",
+    listC_title: "",
+    listC_issuing: "",
+    listC_number: "",
+    listC_expiration: "",
+    firstDayOfEmployment: new Date().toISOString().split("T")[0],
+    employerRepName: "Megan Smith, HR Administrator",
+  });
+  const [refAdminData, setRefAdminData] = useState({
+    verifiedBy: "Megan Smith, HR Administrator",
+    verificationDate: new Date().toISOString().split("T")[0],
+  });
+
+  const [downloadingOfficialPdf, setDownloadingOfficialPdf] = useState(false);
+  const [modalTab, setModalTab] = useState<"preview" | "fields">(isWebForm ? "preview" : "fields");
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let url: string | null = null;
+
+    if (modalTab === "preview" && isWebForm) {
+      setLoadingPdf(true);
+      setPdfError(null);
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+      applicationsApi.getOfficialPdfBlobUrl(doc.id, overrides)
+        .then((blobUrl) => {
+          if (active) {
+            url = blobUrl;
+            setPdfBlobUrl(blobUrl);
+          }
+        })
+        .catch((err) => {
+          if (active) {
+            setPdfError(err.message || "Failed to render PDF preview.");
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setLoadingPdf(false);
+          }
+        });
+    }
+
+    return () => {
+      active = false;
+      if (url && url.startsWith("blob:")) {
+        window.URL.revokeObjectURL(url);
       }
-      return `
-        <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#374151;width:35%;vertical-align:top">${field.label}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#111827;vertical-align:top;white-space:pre-wrap">${answer}</td>
-        </tr>`;
-    }).join("");
+    };
+  }, [modalTab, doc.id, isWebForm]);
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${doc.section?.name || "Form Submission"} – Reliant Home Health</title>
-          <style>
-            body { font-family: Arial, sans-serif; color: #111827; margin: 32px; background: #fff; }
-            h1 { font-size: 22px; font-weight: 900; color: #0d3b66; margin: 0 0 6px 0; }
-            .meta { font-size: 12px; color: #6b7280; margin-bottom: 24px; border-bottom: 2px solid #0d3b66; padding-bottom: 12px; }
-            table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
-            thead td { background: #0d3b66; color: white; padding: 10px 12px; font-weight: 700; }
-            tr:nth-child(even) td { background: #f9fafb; }
-            .footer { margin-top: 40px; font-size: 10px; color: #9ca3af; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }
-          </style>
-        </head>
-        <body>
-          <h1>${doc.section?.name || "Form Submission"}</h1>
-          <div class="meta">Submitted: ${submittedAt} &nbsp;·&nbsp; Status: ${doc.status} &nbsp;·&nbsp; Reliant Home Health Admin Portal</div>
-          <table>
-            <thead><tr><td>Field / Question</td><td>Applicant Submission / Answer</td></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div class="footer">Reliant Home Health Administrative Document Export</div>
-        </body>
-      </html>`;
+  const handleRefreshPdfPreview = async () => {
+    setLoadingPdf(true);
+    setPdfError(null);
+    try {
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+      const url = await applicationsApi.getOfficialPdfBlobUrl(doc.id, overrides);
+      setPdfBlobUrl(url);
+    } catch (err: any) {
+      setPdfError(err.message || "Failed to update preview.");
+    } finally {
+      setLoadingPdf(false);
+    }
+  };
 
-    // Attempt direct print via iframe
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:absolute;width:0;height:0;border:none;top:-9999px";
-    document.body.appendChild(iframe);
-    const doc2 = iframe.contentWindow?.document;
-    if (doc2) {
-      doc2.open();
-      doc2.write(html);
-      doc2.close();
-      setTimeout(() => {
-        iframe.contentWindow?.print();
-        setTimeout(() => document.body.removeChild(iframe), 1000);
-      }, 400);
+  const handleDownloadFormPdf = async () => {
+    setDownloadingOfficialPdf(true);
+    try {
+      const cleanName = `${(doc.section?.name || 'official-document').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-signed.pdf`;
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+      await applicationsApi.downloadOfficialPdf(doc.id, cleanName, overrides);
+    } catch (err) {
+      console.warn("Could not download official PDF, falling back to printable view", err);
+      // Fallback: render summary table printout
+      const submittedAt = doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString() : "N/A";
+      const rows = formSchema.map((field: any) => {
+        let answer = formData[field.id];
+        if (field.type === "checkbox") {
+          answer = answer ? "✓ Yes / Confirmed" : "✗ No / Not checked";
+        } else if (field.type === "signature") {
+          answer = answer ? `<img src="${answer}" style="max-height:60px;object-fit:contain;border:1px solid #ddd;padding:4px;" />` : "(No signature provided)";
+        } else if (field.type === "file" || field.type === "file_upload" || (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('data:image') || answer.startsWith('/uploads')))) {
+          if (typeof answer === 'string' && answer.startsWith('data:image')) {
+            answer = `<img src="${answer}" style="max-height:200px;object-fit:contain;border:1px solid #ccc;padding:4px;border-radius:4px;" />`;
+          } else if (typeof answer === 'string' && (answer.startsWith('http') || answer.startsWith('/uploads') || answer.match(/\.(jpg|jpeg|png|webp|gif|pdf)$/i))) {
+            const fileUrl = resolveMediaUrl(answer);
+            answer = `<a href="${fileUrl}" target="_blank" style="color:#0d3b66;font-weight:bold;">View Uploaded Attachment</a><br/><img src="${fileUrl}" style="max-height:200px;object-fit:contain;margin-top:6px;border:1px solid #ccc;padding:4px;border-radius:4px;" onerror="this.style.display='none'" />`;
+          } else {
+            answer = answer || "(No attachment provided)";
+          }
+        } else {
+          answer = answer || "(No answer provided)";
+        }
+        return `
+          <tr>
+            <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#374151;width:35%;vertical-align:top">${field.label}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#111827;vertical-align:top;white-space:pre-wrap">${answer}</td>
+          </tr>`;
+      }).join("");
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>${doc.section?.name || "Form Submission"} – Reliant Home Health</title>
+            <style>
+              body { font-family: Arial, sans-serif; color: #111827; margin: 32px; background: #fff; }
+              h1 { font-size: 22px; font-weight: 900; color: #0d3b66; margin: 0 0 6px 0; }
+              .meta { font-size: 12px; color: #6b7280; margin-bottom: 24px; border-bottom: 2px solid #0d3b66; padding-bottom: 12px; }
+              table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+              thead td { background: #0d3b66; color: white; padding: 10px 12px; font-weight: 700; }
+              tr:nth-child(even) td { background: #f9fafb; }
+              .footer { margin-top: 40px; font-size: 10px; color: #9ca3af; text-align: center; border-top: 1px solid #eee; padding-top: 12px; }
+            </style>
+          </head>
+          <body>
+            <h1>${doc.section?.name || "Form Submission"}</h1>
+            <div class="meta">Submitted: ${submittedAt} &nbsp;·&nbsp; Status: ${doc.status} &nbsp;·&nbsp; Reliant Home Health Admin Portal</div>
+            <table>
+              <thead><tr><td>Field / Question</td><td>Applicant Submission / Answer</td></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+            <div class="footer">Reliant Home Health Administrative Document Export</div>
+          </body>
+        </html>`;
+
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "position:absolute;width:0;height:0;border:none;top:-9999px";
+      document.body.appendChild(iframe);
+      const doc2 = iframe.contentWindow?.document;
+      if (doc2) {
+        doc2.open();
+        doc2.write(html);
+        doc2.close();
+        setTimeout(() => {
+          iframe.contentWindow?.print();
+          setTimeout(() => document.body.removeChild(iframe), 1000);
+        }, 400);
+      }
+    } finally {
+      setDownloadingOfficialPdf(false);
     }
   };
 
@@ -654,12 +778,12 @@ function ReviewDocumentModal({
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl border my-8 flex flex-col max-h-[85vh] overflow-hidden"
+        className="bg-card rounded-2xl shadow-2xl w-full max-w-4xl border my-6 flex flex-col max-h-[92vh] overflow-hidden"
       >
         {/* Header */}
-        <div className="p-6 border-b flex items-center justify-between shrink-0 bg-card z-10">
+        <div className="p-5 border-b flex flex-wrap items-center justify-between gap-3 shrink-0 bg-card z-10">
           <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2">
               Review Document
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
                 doc.status === "APPROVED" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
@@ -668,18 +792,63 @@ function ReviewDocumentModal({
                 {doc.status}
               </span>
             </h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {doc.section?.name} · Submitted {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleString() : "N/A"}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {isWebForm && (
+              <div className="flex items-center gap-1 bg-muted p-1 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setModalTab("preview")}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    modalTab === "preview"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5 text-primary" />
+                  Live PDF Preview
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab("fields")}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    modalTab === "fields"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Form Responses
+                </button>
+              </div>
+            )}
+
+            {pdfBlobUrl && modalTab === "preview" && (
+              <a
+                href={pdfBlobUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-2 border bg-background hover:bg-muted text-foreground text-xs font-semibold rounded-xl transition-all shadow-sm"
+                title="Pop out in new tab"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Pop Out</span>
+              </a>
+            )}
+
             {isWebForm && (
               <button
+                type="button"
                 onClick={handleDownloadFormPdf}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold rounded-xl transition-all shadow-sm"
-                title="Download form answers as printable PDF document"
+                disabled={downloadingOfficialPdf}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-bold rounded-xl transition-all shadow-sm disabled:opacity-50"
+                title="Download official signed and stamped government PDF"
               >
-                <Download className="w-3.5 h-3.5" />
+                {downloadingOfficialPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 Download PDF
               </button>
             )}
@@ -689,14 +858,81 @@ function ReviewDocumentModal({
           </div>
         </div>
 
+        {/* Status Context Banner */}
+        {doc.status === "APPROVED" && (
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800 px-6 py-2.5 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>Document is Approved.</strong> You may update notes/expiration date or revoke approval if revision is needed.
+              </span>
+            </div>
+          </div>
+        )}
+        {doc.status === "REJECTED" && (
+          <div className="bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800 px-6 py-2.5 flex items-center justify-between text-xs text-red-900 dark:text-red-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+              <span>
+                <strong>Document is Rejected.</strong> You can revise rejection notes or re-approve this document.
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Scrollable Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
           {/* Document contents viewer */}
           <div className="bg-muted/30 border rounded-xl p-5 space-y-4">
-            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Document Contents</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                {isWebForm ? (modalTab === "preview" ? "Live Official Form Document Preview" : "Form Submission Data") : "Uploaded Document Preview"}
+              </h3>
+              {isWebForm && modalTab === "preview" && (isI9 || isRef) && (
+                <button
+                  type="button"
+                  onClick={handleRefreshPdfPreview}
+                  disabled={loadingPdf}
+                  className="text-xs text-primary font-bold hover:underline inline-flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Refresh Preview
+                </button>
+              )}
+            </div>
             
             {isWebForm ? (
-              <div className="space-y-4">
+              modalTab === "preview" ? (
+                <div className="space-y-3">
+                  {loadingPdf ? (
+                    <div className="h-[55vh] flex flex-col items-center justify-center space-y-3 bg-muted/20 rounded-xl border border-dashed text-center p-6">
+                      <Loader2 className="w-9 h-9 animate-spin text-primary" />
+                      <p className="text-sm font-semibold text-foreground">Rendering live signed official PDF...</p>
+                      <p className="text-xs text-muted-foreground">Applying applicant signatures, timestamps, and PA official form stamps</p>
+                    </div>
+                  ) : pdfError ? (
+                    <div className="p-6 text-center bg-destructive/10 text-destructive rounded-xl border space-y-2">
+                      <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
+                      <p className="text-sm font-semibold">{pdfError}</p>
+                      <button
+                        type="button"
+                        onClick={handleRefreshPdfPreview}
+                        className="text-xs font-bold underline hover:opacity-80 inline-flex items-center gap-1"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Retry PDF Generation
+                      </button>
+                    </div>
+                  ) : pdfBlobUrl ? (
+                    <div className="space-y-2">
+                      <iframe
+                        src={pdfBlobUrl}
+                        className="w-full h-[58vh] rounded-xl border bg-white shadow-sm"
+                        title="Official PDF Preview"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="space-y-4">
                 {formSchema.length === 0 && Object.keys(formData).length === 0 ? (
                   <p className="text-sm text-muted-foreground italic">No fields configured or submitted on this form.</p>
                 ) : (
@@ -796,7 +1032,8 @@ function ReviewDocumentModal({
                   })
                 )}
               </div>
-            ) : (
+            )
+          ) : (
               <div className="flex flex-col items-center justify-center py-6 space-y-3">
                 <FileText className="w-12 h-12 text-primary" />
                 <div className="text-center">
@@ -820,6 +1057,25 @@ function ReviewDocumentModal({
                         <span className="text-[11px] bg-black/60 px-2.5 py-0.5 rounded-full font-medium">Click to expand & download scan</span>
                       </div>
                     </div>
+                  ) : typeof doc.uploadedFileUrl === 'string' && doc.uploadedFileUrl.match(/\.pdf($|\?)/i) ? (
+                    <div className="w-full space-y-2">
+                      <iframe
+                        src={resolveMediaUrl(doc.uploadedFileUrl)}
+                        className="w-full h-[58vh] rounded-xl border bg-white shadow-sm"
+                        title="Uploaded PDF Preview"
+                      />
+                      <div className="flex justify-end">
+                        <a
+                          href={resolveMediaUrl(doc.uploadedFileUrl)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-primary font-bold hover:underline"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Open in new tab
+                        </a>
+                      </div>
+                    </div>
                   ) : (
                     <a
                       href={resolveMediaUrl(doc.uploadedFileUrl)}
@@ -837,6 +1093,204 @@ function ReviewDocumentModal({
               </div>
             )}
           </div>
+
+          {/* Optional Employer / Admin Section 2 Overrides for Official PDF */}
+          {isI9 && (
+            <div className="border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 rounded-xl p-4 space-y-3">
+              <div
+                className="flex items-center justify-between cursor-pointer select-none"
+                onClick={() => setShowEmployerVerification(!showEmployerVerification)}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider">
+                    Employer Section 2 Verification (Form I-9)
+                  </h4>
+                </div>
+                <span className="text-xs text-blue-700 dark:text-blue-400 font-semibold hover:underline">
+                  {showEmployerVerification ? "Hide Section 2" : "+ Add Document Details & Signer"}
+                </span>
+              </div>
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                Federal law requires employers to record identity and work authorization documents within 3 business days of hire. Any details filled here will be stamped onto Section 2 when downloading the official Form I-9 PDF.
+              </p>
+
+              {showEmployerVerification && (
+                <div className="space-y-4 pt-2 border-t border-blue-200/60">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">First Day of Employment (Hire Date)</label>
+                      <input
+                        type="date"
+                        value={i9EmployerData.firstDayOfEmployment}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, firstDayOfEmployment: e.target.value })}
+                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">Employer / Representative Name & Title</label>
+                      <input
+                        type="text"
+                        value={i9EmployerData.employerRepName}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, employerRepName: e.target.value })}
+                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                        placeholder="e.g. Megan Smith, HR Administrator"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="text-xs font-bold text-foreground">Document Examination (List A OR List B + List C)</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* List A */}
+                    <div className="p-3 bg-background border rounded-lg space-y-2">
+                      <span className="text-xs font-bold text-foreground block">List A (Both Identity & Auth)</span>
+                      <input
+                        type="text"
+                        placeholder="Doc Title (e.g. US Passport)"
+                        value={i9EmployerData.listA_title}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_title: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Issuing Authority"
+                        value={i9EmployerData.listA_issuing}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_issuing: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Document #"
+                        value={i9EmployerData.listA_number}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_number: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="date"
+                        placeholder="Expiration Date"
+                        value={i9EmployerData.listA_expiration}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_expiration: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                    </div>
+
+                    {/* List B */}
+                    <div className="p-3 bg-background border rounded-lg space-y-2">
+                      <span className="text-xs font-bold text-foreground block">List B (Identity)</span>
+                      <input
+                        type="text"
+                        placeholder="Doc Title (e.g. Driver's License)"
+                        value={i9EmployerData.listB_title}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listB_title: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Issuing Authority (e.g. PennDOT)"
+                        value={i9EmployerData.listB_issuing}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listB_issuing: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Document #"
+                        value={i9EmployerData.listB_number}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listB_number: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="date"
+                        placeholder="Expiration Date"
+                        value={i9EmployerData.listB_expiration}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listB_expiration: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                    </div>
+
+                    {/* List C */}
+                    <div className="p-3 bg-background border rounded-lg space-y-2">
+                      <span className="text-xs font-bold text-foreground block">List C (Employment Auth)</span>
+                      <input
+                        type="text"
+                        placeholder="Doc Title (e.g. Social Security Card)"
+                        value={i9EmployerData.listC_title}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listC_title: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Issuing Authority (e.g. SSA)"
+                        value={i9EmployerData.listC_issuing}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listC_issuing: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Document #"
+                        value={i9EmployerData.listC_number}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listC_number: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                      <input
+                        type="date"
+                        placeholder="Expiration Date"
+                        value={i9EmployerData.listC_expiration}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listC_expiration: e.target.value })}
+                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isRef && (
+            <div className="border border-blue-200 bg-blue-50/60 dark:bg-blue-950/20 rounded-xl p-4 space-y-3">
+              <div
+                className="flex items-center justify-between cursor-pointer select-none"
+                onClick={() => setShowEmployerVerification(!showEmployerVerification)}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider">
+                    HR Reference Verification Sign-off (Optional)
+                  </h4>
+                </div>
+                <span className="text-xs text-blue-700 dark:text-blue-400 font-semibold hover:underline">
+                  {showEmployerVerification ? "Hide" : "+ Add Verification Sign-off"}
+                </span>
+              </div>
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                Record the HR representative who verified phone references so the details are printed onto the official reference check PDF.
+              </p>
+
+              {showEmployerVerification && (
+                <div className="space-y-3 pt-2 border-t border-blue-200/60">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">HR Verifier Name & Title</label>
+                      <input
+                        type="text"
+                        value={refAdminData.verifiedBy}
+                        onChange={(e) => setRefAdminData({ ...refAdminData, verifiedBy: e.target.value })}
+                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">Verification Date</label>
+                      <input
+                        type="date"
+                        value={refAdminData.verificationDate}
+                        onChange={(e) => setRefAdminData({ ...refAdminData, verificationDate: e.target.value })}
+                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Expiration Date Section */}
           <div className="space-y-2">
@@ -871,30 +1325,80 @@ function ReviewDocumentModal({
         {/* Footer Actions */}
         <div className="p-6 border-t shrink-0 flex items-center justify-between gap-3 bg-muted/10">
           <button
+            type="button"
             onClick={onClose}
             disabled={isPending}
             className="px-5 py-2.5 border bg-background hover:bg-muted text-xs font-bold rounded-xl transition-all"
           >
-            Cancel
+            {doc.status === "APPROVED" || doc.status === "REJECTED" ? "Close" : "Cancel"}
           </button>
           
           <div className="flex gap-2">
-            <button
-              onClick={() => handleAction("REJECTED")}
-              disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-destructive hover:bg-destructive/95 text-destructive-foreground text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
-            >
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-              Reject Document
-            </button>
-            <button
-              onClick={() => handleAction("APPROVED")}
-              disabled={isPending}
-              className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
-            >
-              {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-              Approve Document
-            </button>
+            {doc.status === "APPROVED" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleAction("REJECTED")}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-destructive/10 hover:bg-destructive text-destructive hover:text-destructive-foreground border border-destructive/20 text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                  title="Revoke approval and require applicant to resubmit"
+                >
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  Revoke / Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAction("APPROVED")}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Save Changes
+                </button>
+              </>
+            ) : doc.status === "REJECTED" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleAction("REJECTED")}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 border bg-background hover:bg-muted text-foreground text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Update Rejection Notes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAction("APPROVED")}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Re-Approve Document
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleAction("REJECTED")}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-destructive hover:bg-destructive/95 text-destructive-foreground text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  Reject Document
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAction("APPROVED")}
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition-all disabled:opacity-50"
+                >
+                  {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  Approve Document
+                </button>
+              </>
+            )}
           </div>
         </div>
       </motion.div>

@@ -19,7 +19,8 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
-  Mail
+  Mail,
+  UserCheck
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth-store";
 import { useQuery } from "@tanstack/react-query";
@@ -190,6 +191,7 @@ export default function AdminLayout({
             <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 mt-6 px-4">Recruiting</div>
           )}
           <NavLink href="/admin/applications" icon={Users} badge={pendingCount}>Applications</NavLink>
+          <NavLink href="/admin/candidates" icon={UserCheck}>Candidates 360</NavLink>
           <NavLink href="/admin/contacts" icon={Mail} badge={unreadContactCount}>Contact Inbox</NavLink>
           <NavLink href="/admin/jobs" icon={Briefcase}>Jobs Management</NavLink>
           <NavLink href="/admin/documents" icon={FileUp}>Document Sections</NavLink>
