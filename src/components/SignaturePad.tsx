@@ -7,9 +7,15 @@ interface SignaturePadProps {
   value?: string;
   onChange: (value: string | null) => void;
   readOnly?: boolean;
+  storageKey?: string | null;
 }
 
-export default function SignaturePad({ value, onChange, readOnly = false }: SignaturePadProps) {
+export default function SignaturePad({
+  value,
+  onChange,
+  readOnly = false,
+  storageKey = "reliant_applicant_signature",
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -96,8 +102,8 @@ export default function SignaturePad({ value, onChange, readOnly = false }: Sign
       const dataUrl = canvas.toDataURL("image/png");
       onChange(dataUrl);
       try {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("reliant_applicant_signature", dataUrl);
+        if (typeof window !== "undefined" && storageKey) {
+          localStorage.setItem(storageKey, dataUrl);
         }
       } catch {}
     }

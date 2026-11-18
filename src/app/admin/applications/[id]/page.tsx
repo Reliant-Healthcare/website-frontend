@@ -11,6 +11,7 @@ import {
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { applicationsApi, documentSectionsApi, aiApi } from "@/lib/api";
+import SignaturePad from "@/components/SignaturePad";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -104,8 +105,8 @@ export default function ApplicationDetailPage() {
   });
 
   const updateDocStatusMutation = useMutation({
-    mutationFn: ({ docId, status, adminNotes, expirationDate }: { docId: string; status: "APPROVED" | "REJECTED"; adminNotes?: string; expirationDate?: string }) =>
-      applicationsApi.updateDocumentStatus(docId, status, adminNotes, expirationDate),
+    mutationFn: ({ docId, status, adminNotes, expirationDate, adminOverrides }: { docId: string; status: "APPROVED" | "REJECTED"; adminNotes?: string; expirationDate?: string; adminOverrides?: any }) =>
+      applicationsApi.updateDocumentStatus(docId, status, adminNotes, expirationDate, adminOverrides),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["application", applicationId] }),
   });
 
@@ -545,8 +546,8 @@ export default function ApplicationDetailPage() {
           <ReviewDocumentModal
             doc={reviewingDoc}
             onClose={() => setReviewingDoc(null)}
-            onApprove={async (notes, expirationDate) => {
-              await updateDocStatusMutation.mutateAsync({ docId: reviewingDoc.id, status: "APPROVED", adminNotes: notes, expirationDate });
+            onApprove={async (notes, expirationDate, adminOverrides) => {
+              await updateDocStatusMutation.mutateAsync({ docId: reviewingDoc.id, status: "APPROVED", adminNotes: notes, expirationDate, adminOverrides });
               setReviewingDoc(null);
             }}
             onReject={async (notes) => {
@@ -570,7 +571,7 @@ function ReviewDocumentModal({
 }: {
   doc: any;
   onClose: () => void;
-  onApprove: (notes: string, expirationDate?: string) => Promise<void>;
+  onApprove: (notes: string, expirationDate?: string, adminOverrides?: any) => Promise<void>;
   onReject: (notes: string) => Promise<void>;
 }) {
   const [adminNotes, setAdminNotes] = useState(doc.adminNotes || "");
@@ -607,7 +608,8 @@ function ReviewDocumentModal({
     setIsPending(true);
     try {
       if (status === "APPROVED") {
-        await onApprove(adminNotes, expirationDate || undefined);
+        const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+        await onApprove(adminNotes, expirationDate || undefined, overrides);
       } else {
         await onReject(adminNotes);
       }
@@ -620,27 +622,65 @@ function ReviewDocumentModal({
 
   const isI9 = (doc.section?.name || "").toLowerCase().includes("i-9") || doc.section?.code === "I9";
   const isRef = (doc.section?.name || "").toLowerCase().includes("reference") || doc.section?.code === "REF";
+  const initialOverrides = doc.formData?._adminOverrides || {};
+
   const [showEmployerVerification, setShowEmployerVerification] = useState(false);
+  const [savingSignoff, setSavingSignoff] = useState(false);
+  const [signoffSavedSuccess, setSignoffSavedSuccess] = useState(false);
+
   const [i9EmployerData, setI9EmployerData] = useState({
-    listA_title: "",
-    listA_issuing: "",
-    listA_number: "",
-    listA_expiration: "",
-    listB_title: "",
-    listB_issuing: "",
-    listB_number: "",
-    listB_expiration: "",
-    listC_title: "",
-    listC_issuing: "",
-    listC_number: "",
-    listC_expiration: "",
-    firstDayOfEmployment: new Date().toISOString().split("T")[0],
-    employerRepName: "Megan Smith, HR Administrator",
+    listA_title: initialOverrides.listA_title || "",
+    listA_issuing: initialOverrides.listA_issuing || "",
+    listA_number: initialOverrides.listA_number || "",
+    listA_expiration: initialOverrides.listA_expiration || "",
+    listB_title: initialOverrides.listB_title || "",
+    listB_issuing: initialOverrides.listB_issuing || "",
+    listB_number: initialOverrides.listB_number || "",
+    listB_expiration: initialOverrides.listB_expiration || "",
+    listC_title: initialOverrides.listC_title || "",
+    listC_issuing: initialOverrides.listC_issuing || "",
+    listC_number: initialOverrides.listC_number || "",
+    listC_expiration: initialOverrides.listC_expiration || "",
+    firstDayOfEmployment: initialOverrides.firstDayOfEmployment || new Date().toISOString().split("T")[0],
+    employerRepName: initialOverrides.employerRepName || "Megan Smith, HR Administrator",
   });
-  const [refAdminData, setRefAdminData] = useState({
-    verifiedBy: "Megan Smith, HR Administrator",
-    verificationDate: new Date().toISOString().split("T")[0],
+
+  const [refAdminData, setRefAdminData] = useState(() => {
+    const savedHrSig = typeof window !== "undefined" ? localStorage.getItem("reliant_hr_signature") || "" : "";
+    return {
+      verifiedBy: initialOverrides.verifiedBy || "Megan Smith",
+      verifiedTitle: initialOverrides.verifiedTitle || "HR Administrator",
+      verificationDate: initialOverrides.verificationDate || new Date().toISOString().split("T")[0],
+      verificationMethod: initialOverrides.verificationMethod || "phone",
+      ratingQuality: initialOverrides.ratingQuality || "exceptional",
+      ratingClinical: initialOverrides.ratingClinical || "exceptional",
+      ratingAttendance: initialOverrides.ratingAttendance || "exceptional",
+      q1_knowPersonally: initialOverrides.q1_knowPersonally || "yes",
+      q2_howLongKnown: initialOverrides.q2_howLongKnown || "yes",
+      q3_dependable: initialOverrides.q3_dependable || "yes",
+      q4_honest: initialOverrides.q4_honest || "yes",
+      q5_communicates: initialOverrides.q5_communicates || "yes",
+      q6_responsibility: initialOverrides.q6_responsibility || "yes",
+      q7_recommend: initialOverrides.q7_recommend || "yes",
+      hrSignature: initialOverrides.hrSignature || savedHrSig || "",
+    };
   });
+
+  const handleSaveSignoff = async () => {
+    setSavingSignoff(true);
+    setSignoffSavedSuccess(false);
+    try {
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : {};
+      await applicationsApi.saveAdminOverrides(doc.id, overrides);
+      setSignoffSavedSuccess(true);
+      setTimeout(() => setSignoffSavedSuccess(false), 3500);
+      await handleRefreshPdfPreview();
+    } catch (err: any) {
+      alert("Failed to save verification sign-off: " + (err.message || "Unknown error"));
+    } finally {
+      setSavingSignoff(false);
+    }
+  };
 
   const [downloadingOfficialPdf, setDownloadingOfficialPdf] = useState(false);
   const [modalTab, setModalTab] = useState<"preview" | "fields">(isWebForm ? "preview" : "fields");
@@ -1281,6 +1321,35 @@ function ReviewDocumentModal({
                       />
                     </div>
                   </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveSignoff}
+                        disabled={savingSignoff}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
+                      >
+                        {savingSignoff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                        Save Section 2 Details
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRefreshPdfPreview}
+                        disabled={loadingPdf}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border text-xs font-semibold rounded-lg hover:bg-muted transition-all disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingPdf ? "animate-spin" : ""}`} />
+                        Update Preview
+                      </button>
+                    </div>
+                    {signoffSavedSuccess && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Details saved & preview updated!
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1295,7 +1364,7 @@ function ReviewDocumentModal({
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-blue-600" />
                   <h4 className="text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider">
-                    HR Reference Verification Sign-off (Optional)
+                    HR Reference Verification Sign-off & Office-Only Review
                   </h4>
                 </div>
                 <span className="text-xs text-blue-700 dark:text-blue-400 font-semibold hover:underline">
@@ -1303,30 +1372,256 @@ function ReviewDocumentModal({
                 </span>
               </div>
               <p className="text-xs text-blue-700 dark:text-blue-400">
-                Record the HR representative who verified phone references so the details are printed onto the official reference check PDF.
+                Complete telephone verification ratings, questionnaire responses, verification method, and draw your HR signature. All recorded details will stamp directly onto the official reference check PDF.
               </p>
 
               {showEmployerVerification && (
-                <div className="space-y-3 pt-2 border-t border-blue-200/60">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-semibold text-foreground">HR Verifier Name & Title</label>
-                      <input
-                        type="text"
-                        value={refAdminData.verifiedBy}
-                        onChange={(e) => setRefAdminData({ ...refAdminData, verifiedBy: e.target.value })}
-                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                <div className="space-y-4 pt-3 border-t border-blue-200/70 dark:border-blue-900/40">
+                  {/* 1. Office Only - HR Phone Verification Ratings */}
+                  <div className="bg-background/80 rounded-xl p-3 border border-border/80 space-y-2.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary block">
+                      Office Only — HR Phone Verification Ratings
+                    </span>
+
+                    {/* Quality of Work */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 py-1.5 border-b border-border/40 text-xs">
+                      <span className="font-medium text-foreground">Quality of Work</span>
+                      <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40 gap-1">
+                        {(["exceptional", "satisfactory", "unsatisfactory"] as const).map((lvl) => (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => setRefAdminData({ ...refAdminData, ratingQuality: lvl })}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all capitalize ${
+                              refAdminData.ratingQuality === lvl
+                                ? lvl === "exceptional"
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : lvl === "satisfactory"
+                                  ? "bg-blue-600 text-white shadow-sm"
+                                  : "bg-amber-600 text-white shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Clinical / Care Ability */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 py-1.5 border-b border-border/40 text-xs">
+                      <span className="font-medium text-foreground">Clinical / Care Ability</span>
+                      <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40 gap-1">
+                        {(["exceptional", "satisfactory", "unsatisfactory"] as const).map((lvl) => (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => setRefAdminData({ ...refAdminData, ratingClinical: lvl })}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all capitalize ${
+                              refAdminData.ratingClinical === lvl
+                                ? lvl === "exceptional"
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : lvl === "satisfactory"
+                                  ? "bg-blue-600 text-white shadow-sm"
+                                  : "bg-amber-600 text-white shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Attendance & Punctuality */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 py-1.5 text-xs">
+                      <span className="font-medium text-foreground">Attendance & Punctuality</span>
+                      <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40 gap-1">
+                        {(["exceptional", "satisfactory", "unsatisfactory"] as const).map((lvl) => (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => setRefAdminData({ ...refAdminData, ratingAttendance: lvl })}
+                            className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all capitalize ${
+                              refAdminData.ratingAttendance === lvl
+                                ? lvl === "exceptional"
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : lvl === "satisfactory"
+                                  ? "bg-blue-600 text-white shadow-sm"
+                                  : "bg-amber-600 text-white shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            }`}
+                          >
+                            {lvl}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. Office Only - Personal Reference Questionnaire */}
+                  <div className="bg-background/80 rounded-xl p-3 border border-border/80 space-y-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary block">
+                      Office Only — Personal Reference Questionnaire
+                    </span>
+                    <div className="space-y-1 divide-y divide-border/40">
+                      {[
+                        { key: "q1_knowPersonally", label: "1. Do you know the applicant personally?" },
+                        { key: "q2_howLongKnown", label: "2. How long have you known applicant? (Verify relationship)" },
+                        { key: "q3_dependable", label: "3. Is the applicant dependable, trustworthy, and punctual?" },
+                        { key: "q4_honest", label: "4. Does the applicant demonstrate honest and good moral character?" },
+                        { key: "q5_communicates", label: "5. Does the applicant communicate and work well with others?" },
+                        { key: "q6_responsibility", label: "6. Does applicant handle responsibility effectively?" },
+                        { key: "q7_recommend", label: "7. Would you recommend applicant for home health care duties?" },
+                      ].map((q) => {
+                        const currentVal = (refAdminData as any)[q.key];
+                        return (
+                          <div key={q.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 py-1.5 text-xs">
+                            <span className="text-foreground text-[11.5px] pr-2">{q.label}</span>
+                            <div className="inline-flex rounded-lg border border-border p-0.5 bg-muted/40 gap-1 shrink-0 self-end sm:self-auto">
+                              <button
+                                type="button"
+                                onClick={() => setRefAdminData({ ...refAdminData, [q.key]: "yes" })}
+                                className={`px-2.5 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                  currentVal === "yes"
+                                    ? "bg-emerald-600 text-white shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                YES
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRefAdminData({ ...refAdminData, [q.key]: "no" })}
+                                className={`px-2.5 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                  currentVal === "no"
+                                    ? "bg-red-600 text-white shadow-sm"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                NO
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 3. Verification Method */}
+                  <div className="bg-background/80 rounded-xl p-3 border border-border/80 space-y-1.5">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary block">
+                      Verification Method
+                    </span>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setRefAdminData({ ...refAdminData, verificationMethod: "phone" })}
+                        className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                          refAdminData.verificationMethod === "phone"
+                            ? "border-primary bg-primary/10 text-primary shadow-sm"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>Phone Call</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRefAdminData({ ...refAdminData, verificationMethod: "mail_electronic" })}
+                        className={`p-2 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                          refAdminData.verificationMethod === "mail_electronic"
+                            ? "border-primary bg-primary/10 text-primary shadow-sm"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Mail className="w-3.5 h-3.5" />
+                        <span>Mail / Electronic</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 4. HR Sign-off & Signature */}
+                  <div className="bg-background/80 rounded-xl p-3 border border-border/80 space-y-3">
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary block">
+                      HR Specialist Sign-off
+                    </span>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-xs font-semibold text-foreground">Verified By (HR Specialist)</label>
+                        <input
+                          type="text"
+                          value={refAdminData.verifiedBy}
+                          onChange={(e) => setRefAdminData({ ...refAdminData, verifiedBy: e.target.value })}
+                          className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                          placeholder="e.g. Megan Smith"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-foreground">HR Title</label>
+                        <input
+                          type="text"
+                          value={refAdminData.verifiedTitle}
+                          onChange={(e) => setRefAdminData({ ...refAdminData, verifiedTitle: e.target.value })}
+                          className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                          placeholder="e.g. HR Administrator"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold text-foreground">Verification Date</label>
+                        <input
+                          type="date"
+                          value={refAdminData.verificationDate}
+                          onChange={(e) => setRefAdminData({ ...refAdminData, verificationDate: e.target.value })}
+                          className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* HR Signature Field */}
+                    <div className="pt-2">
+                      <label className="text-xs font-semibold text-foreground block mb-1">
+                        HR Digital Signature <span className="text-destructive">*</span>
+                        <span className="text-[11px] font-normal text-muted-foreground ml-1.5">
+                          (Draw your signature; it will be officially stamped onto the PDF)
+                        </span>
+                      </label>
+                      <SignaturePad
+                        value={refAdminData.hrSignature}
+                        onChange={(sig) => setRefAdminData({ ...refAdminData, hrSignature: sig || "" })}
+                        storageKey="reliant_hr_signature"
                       />
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-foreground">Verification Date</label>
-                      <input
-                        type="date"
-                        value={refAdminData.verificationDate}
-                        onChange={(e) => setRefAdminData({ ...refAdminData, verificationDate: e.target.value })}
-                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
-                      />
+                  </div>
+
+                  {/* Save Sign-off & Refresh Preview Actions */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveSignoff}
+                        disabled={savingSignoff}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
+                      >
+                        {savingSignoff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                        Save Verification Sign-off
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRefreshPdfPreview}
+                        disabled={loadingPdf}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border text-xs font-semibold rounded-lg hover:bg-muted transition-all disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingPdf ? "animate-spin" : ""}`} />
+                        Update Preview
+                      </button>
                     </div>
+                    {signoffSavedSuccess && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Verification saved & preview updated!
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

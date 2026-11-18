@@ -131,10 +131,16 @@ export const applicationsApi = {
       body: JSON.stringify({ formData, isDraft }),
     }),
 
-  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string) =>
+  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string, adminOverrides?: any) =>
     apiFetch(`/applications/documents/${docId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, adminNotes, expirationDate }),
+      body: JSON.stringify({ status, adminNotes, expirationDate, adminOverrides }),
+    }),
+
+  saveAdminOverrides: (docId: string, adminOverrides: any) =>
+    apiFetch(`/applications/documents/${docId}/admin-overrides`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminOverrides }),
     }),
 
   sendDocumentExpirationReminder: (docId: string) =>
