@@ -131,45 +131,14 @@ export default function CandidateDetailPage() {
     },
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-10 h-10 animate-spin text-[#003366] mb-4" />
-        <p className="text-sm font-medium text-slate-600">Loading Candidate 360 profile...</p>
-      </div>
-    );
-  }
-
-  if (error || !data || !data.candidate) {
-    return (
-      <div className="p-8 max-w-4xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-red-900">Candidate Not Found</h2>
-          <p className="text-sm text-red-700 mt-1 mb-4">
-            The candidate profile you are looking for may have been deleted or does not exist.
-          </p>
-          <Link
-            href="/admin/candidates"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#003366] text-white rounded-xl text-sm font-medium hover:bg-[#002244] transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to Candidate Directory
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const {
-    candidate,
-    applications = [],
-    documentVault = [],
-    training = { enrollments: [], certificates: [], quizAttempts: [] },
-    auditTimeline = [],
-  } = data;
+  const candidate = data?.candidate;
+  const applications = data?.applications || [];
+  const documentVault = data?.documentVault || [];
+  const training = data?.training || { enrollments: [], certificates: [], quizAttempts: [] };
+  const auditTimeline = data?.auditTimeline || [];
   const candidateName =
-    candidate.name ||
-    `${candidate.firstName || ""} ${candidate.lastName || ""}`.trim() ||
+    candidate?.name ||
+    `${candidate?.firstName || ""} ${candidate?.lastName || ""}`.trim() ||
     "Candidate";
   const isHired = applications.some((a: any) => a.status === "HIRED");
   const uniqueRoles = Array.from(new Set(applications.map((a: any) => a.roleType))).filter(Boolean);
@@ -205,6 +174,35 @@ export default function CandidateDetailPage() {
     const start = (vaultPage - 1) * vaultPageSize;
     return filteredVault.slice(start, start + vaultPageSize);
   }, [filteredVault, vaultPage, vaultPageSize]);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+        <Loader2 className="w-10 h-10 animate-spin text-[#003366] mb-4" />
+        <p className="text-sm font-medium text-slate-600">Loading Candidate 360 profile...</p>
+      </div>
+    );
+  }
+
+  if (error || !data || !data.candidate) {
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-red-900">Candidate Not Found</h2>
+          <p className="text-sm text-red-700 mt-1 mb-4">
+            The candidate profile you are looking for may have been deleted or does not exist.
+          </p>
+          <Link
+            href="/admin/candidates"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-[#003366] text-white rounded-xl text-sm font-medium hover:bg-[#002244] transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back to Candidate Directory
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">
