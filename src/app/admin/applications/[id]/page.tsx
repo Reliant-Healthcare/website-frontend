@@ -20,11 +20,8 @@ const resolveMediaUrl = (url?: string | null) => {
   if (!url || typeof url !== "string") return "";
   if (url.startsWith("data:")) return url;
 
-  // Private S3 / DigitalOcean Spaces files require presigned credentials to prevent HTTP 403 Forbidden
-  if (url.includes("digitaloceanspaces.com")) {
-    if (url.includes("X-Amz-Signature") || url.includes("AWSAccessKeyId")) {
-      return url;
-    }
+  // Cloud storage / DigitalOcean Spaces files route through backend proxy for streaming & auth
+  if (url.includes("digitaloceanspaces.com") || url.startsWith("/uploads/") || url.startsWith("uploads/")) {
     const baseUrl = API_URL.replace(/\/+$/, "");
     return `${baseUrl}/upload/view?url=${encodeURIComponent(url)}`;
   }
