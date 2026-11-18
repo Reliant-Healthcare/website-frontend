@@ -269,7 +269,10 @@ export default function ApplicationDetailPage() {
               {application.documents?.map((doc: any) => {
                 const config = statusConfig[doc.status] || statusConfig.PENDING;
                 const StatusIcon = config.icon;
-                const isActionable = doc.status !== "PENDING";
+                const hasUploadedFile = !!doc.uploadedFileUrl && doc.uploadedFileUrl.trim() !== "";
+                const hasFormData = !!doc.formData && typeof doc.formData === "object" && Object.keys(doc.formData).length > 0;
+                const isSubmitted = (hasUploadedFile || hasFormData || !!doc.uploadedAt) && doc.status !== "PENDING";
+                const isActionable = isSubmitted;
 
                 return (
                   <div
@@ -328,7 +331,8 @@ export default function ApplicationDetailPage() {
                           {doc.status === "APPROVED" ? "Manage / View" : doc.status === "REJECTED" ? "Review Rejection" : "Review & Action"}
                         </button>
                       ) : (
-                        <span className="text-xs font-medium text-muted-foreground italic px-2">
+                        <span className="text-xs font-medium text-muted-foreground italic px-2 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
                           Awaiting candidate upload
                         </span>
                       )}
@@ -579,6 +583,9 @@ function ReviewDocumentModal({
   const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
   const formData = doc.formData || {};
   const isWebForm = doc.section?.type === "WEB_FORM" || (doc.formData && Object.keys(doc.formData).length > 0);
+  const hasUploadedFile = !!doc.uploadedFileUrl && doc.uploadedFileUrl.trim() !== "";
+  const hasFormData = !!doc.formData && typeof doc.formData === "object" && Object.keys(doc.formData).length > 0;
+  const isSubmitted = (hasUploadedFile || hasFormData || !!doc.uploadedAt) && doc.status !== "PENDING";
 
   const handleRevealSsn = async () => {
     setLoadingSsn(true);
@@ -593,6 +600,10 @@ function ReviewDocumentModal({
   };
 
   const handleAction = async (status: "APPROVED" | "REJECTED") => {
+    if (!isSubmitted) {
+      alert("Cannot approve or reject a document that has not been submitted by the candidate.");
+      return;
+    }
     setIsPending(true);
     try {
       if (status === "APPROVED") {
@@ -641,7 +652,7 @@ function ReviewDocumentModal({
     let active = true;
     let url: string | null = null;
 
-    if (modalTab === "preview" && isWebForm) {
+    if (modalTab === "preview" && isWebForm && isSubmitted) {
       setLoadingPdf(true);
       setPdfError(null);
       const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
@@ -798,7 +809,7 @@ function ReviewDocumentModal({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {isWebForm && (
+            {isWebForm && isSubmitted && (
               <div className="flex items-center gap-1 bg-muted p-1 rounded-xl">
                 <button
                   type="button"
@@ -827,7 +838,7 @@ function ReviewDocumentModal({
               </div>
             )}
 
-            {pdfBlobUrl && modalTab === "preview" && (
+            {pdfBlobUrl && modalTab === "preview" && isSubmitted && (
               <a
                 href={pdfBlobUrl}
                 target="_blank"
@@ -840,7 +851,7 @@ function ReviewDocumentModal({
               </a>
             )}
 
-            {isWebForm && (
+            {isWebForm && isSubmitted && (
               <button
                 type="button"
                 onClick={handleDownloadFormPdf}
@@ -859,7 +870,20 @@ function ReviewDocumentModal({
         </div>
 
         {/* Status Context Banner */}
-        {doc.status === "APPROVED" && (
+        {!isSubmitted && (
+          <div className="bg-amber-50 dark:bg-amber-950/40 border-b border-amber-200 dark:border-amber-800 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200 shrink-0">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>
+                <strong>Document Not Submitted Yet.</strong> The candidate has not uploaded or submitted this section. Approval and rejection actions are disabled.
+              </span>
+            </div>
+            <span className="text-[11px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-300">
+              Awaiting Candidate Upload
+            </span>
+          </div>
+        )}
+        {isSubmitted && doc.status === "APPROVED" && (
           <div className="bg-emerald-50 dark:bg-emerald-950/40 border-b border-emerald-200 dark:border-emerald-800 px-6 py-2.5 flex items-center justify-between text-xs text-emerald-900 dark:text-emerald-200 shrink-0">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -869,7 +893,7 @@ function ReviewDocumentModal({
             </div>
           </div>
         )}
-        {doc.status === "REJECTED" && (
+        {isSubmitted && doc.status === "REJECTED" && (
           <div className="bg-red-50 dark:bg-red-950/40 border-b border-red-200 dark:border-red-800 px-6 py-2.5 flex items-center justify-between text-xs text-red-900 dark:text-red-200 shrink-0">
             <div className="flex items-center gap-2">
               <XCircle className="w-4 h-4 text-red-600 shrink-0" />
@@ -882,8 +906,25 @@ function ReviewDocumentModal({
 
         {/* Scrollable Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1">
-          {/* Document contents viewer */}
-          <div className="bg-muted/30 border rounded-xl p-5 space-y-4">
+          {!isSubmitted ? (
+            <div className="p-10 text-center bg-muted/20 border border-dashed rounded-2xl space-y-4 my-6">
+              <div className="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 mx-auto">
+                <Clock className="w-7 h-7" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1.5">
+                <h4 className="text-base font-bold text-foreground">Awaiting Candidate Submission</h4>
+                <p className="text-xs text-muted-foreground">
+                  This document section has been assigned to the applicant, but they have not uploaded any files or filled out the required form responses yet.
+                </p>
+                <p className="text-xs text-muted-foreground pt-2">
+                  Once the candidate completes and submits this requirement in their onboarding portal, the signed document, form fields, and attachments will appear here for review and verification.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Document contents viewer */}
+              <div className="bg-muted/30 border rounded-xl p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 {isWebForm ? (modalTab === "preview" ? "Live Official Form Document Preview" : "Form Submission Data") : "Uploaded Document Preview"}
@@ -1320,6 +1361,8 @@ function ReviewDocumentModal({
               className="w-full border rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground resize-none"
             />
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer Actions */}
@@ -1334,7 +1377,12 @@ function ReviewDocumentModal({
           </button>
           
           <div className="flex gap-2">
-            {doc.status === "APPROVED" ? (
+            {!isSubmitted ? (
+              <div className="inline-flex items-center gap-2 px-4 py-2.5 bg-muted text-muted-foreground text-xs font-semibold rounded-xl border cursor-not-allowed">
+                <Clock className="w-4 h-4 text-amber-500" />
+                <span>Cannot approve or reject (Awaiting candidate submission)</span>
+              </div>
+            ) : doc.status === "APPROVED" ? (
               <>
                 <button
                   type="button"

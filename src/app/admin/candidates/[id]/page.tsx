@@ -623,6 +623,8 @@ export default function CandidateDetailPage() {
                     const cfg = statusConfig[doc.status] || statusConfig.PENDING;
                     const StatusIcon = cfg.icon;
 
+                    const isSubmitted = (!!doc.hasFile || !!doc.hasFormData || !!doc.uploadedAt) && doc.status !== "PENDING";
+
                     return (
                       <tr key={doc.documentId} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4 font-semibold text-slate-900">
@@ -663,7 +665,7 @@ export default function CandidateDetailPage() {
                         </td>
                         <td className="py-3.5 px-4 text-right">
                           <div className="inline-flex items-center gap-1.5">
-                            {(doc.documentId || doc.sectionId || doc.fileUrl) && (
+                            {isSubmitted && (doc.documentId || doc.sectionId || doc.fileUrl) && (
                               <button
                                 type="button"
                                 onClick={() => setPreviewDoc(doc)}
@@ -674,7 +676,7 @@ export default function CandidateDetailPage() {
                                 <span>Preview</span>
                               </button>
                             )}
-                            {(doc.documentId || doc.sectionId) && (
+                            {isSubmitted && (doc.documentId || doc.sectionId) && (
                               <button
                                 type="button"
                                 onClick={() => handleDownloadDocumentPdf(doc)}
