@@ -18,7 +18,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const resolveMediaUrl = (url?: string | null) => {
   if (!url || typeof url !== "string") return "";
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  if (url.startsWith("data:")) return url;
+
+  // Private S3 / DigitalOcean Spaces files require presigned credentials to prevent HTTP 403 Forbidden
+  if (url.includes("digitaloceanspaces.com")) {
+    if (url.includes("X-Amz-Signature") || url.includes("AWSAccessKeyId")) {
+      return url;
+    }
+    const baseUrl = API_URL.replace(/\/+$/, "");
+    return `${baseUrl}/upload/view?url=${encodeURIComponent(url)}`;
+  }
+
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const baseUrl = API_URL.replace(/\/+$/, "");
   const cleanPath = url.startsWith("/") ? url : `/${url}`;
   return `${baseUrl}${cleanPath}`;

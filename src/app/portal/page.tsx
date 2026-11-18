@@ -23,7 +23,18 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 const resolveMediaUrl = (url?: string | null) => {
   if (!url || typeof url !== "string") return "";
-  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  if (url.startsWith("data:")) return url;
+
+  // Private S3 / DigitalOcean Spaces files require presigned credentials to prevent HTTP 403 Forbidden
+  if (url.includes("digitaloceanspaces.com")) {
+    if (url.includes("X-Amz-Signature") || url.includes("AWSAccessKeyId")) {
+      return url;
+    }
+    const baseUrl = API_URL.replace(/\/+$/, "");
+    return `${baseUrl}/upload/view?url=${encodeURIComponent(url)}`;
+  }
+
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
   const baseUrl = API_URL.replace(/\/+$/, "");
   const cleanPath = url.startsWith("/") ? url : `/${url}`;
   return `${baseUrl}${cleanPath}`;
@@ -3018,9 +3029,16 @@ function WebFormModal({
                         const resolvedUrl = resolveMediaUrl(valStr);
                         const isImage = valStr.startsWith('data:image') || !!valStr.match(/\.(jpg|jpeg|png|webp|gif|bmp|svg)($|\?)/i);
                         const isPdf = valStr.startsWith('data:application/pdf') || !!valStr.match(/\.pdf($|\?)/i);
-                        const fileName = valStr.startsWith('data:')
+
+                        const rawName = valStr.startsWith('data:')
                           ? (isPdf ? 'Attached Document.pdf' : 'Attached Document Scan.jpg')
                           : valStr.split('/').pop()?.split('?')[0] || 'Attached Document';
+
+                        const isUuidHash = /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(rawName);
+                        const fileExt = rawName.includes('.') ? `.${rawName.split('.').pop()}` : (isPdf ? '.pdf' : '.jpg');
+                        const fileName = isUuidHash
+                          ? `${field.label ? field.label.split('(')[0].trim() : 'Document Scan'} ${fileExt}`
+                          : rawName;
 
                         return (
                           <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 sm:p-3.5 transition-all shadow-xs">
@@ -3035,6 +3053,14 @@ function WebFormModal({
                                     <img
                                       src={resolvedUrl}
                                       alt={field.label || "Document preview"}
+                                      onError={(e) => {
+                                        const target = e.currentTarget;
+                                        if (!target.dataset.triedFallback && valStr && !valStr.startsWith('data:')) {
+                                          target.dataset.triedFallback = 'true';
+                                          const baseUrl = API_URL.replace(/\/+$/, "");
+                                          target.src = `${baseUrl}/upload/view?url=${encodeURIComponent(valStr)}`;
+                                        }
+                                      }}
                                       className="w-full h-full object-cover"
                                     />
                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
@@ -3231,6 +3257,7 @@ function ImageLightboxModal({
   onClose: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
+  const resolvedUrl = resolveMediaUrl(image.url);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -3243,7 +3270,7 @@ function ImageLightboxModal({
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const res = await fetch(image.url);
+      const res = await fetch(resolvedUrl);
       const blob = await res.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -3255,7 +3282,7 @@ function ImageLightboxModal({
       window.URL.revokeObjectURL(blobUrl);
       document.body.removeChild(a);
     } catch {
-      window.open(image.url, "_blank");
+      window.open(resolvedUrl, "_blank");
     } finally {
       setDownloading(false);
     }
@@ -3290,7 +3317,7 @@ function ImageLightboxModal({
             Download Scan
           </button>
           <a
-            href={image.url}
+            href={resolvedUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-muted text-foreground text-xs font-semibold rounded-xl hover:bg-muted/80 transition-all border"
@@ -3316,8 +3343,16 @@ function ImageLightboxModal({
         onClick={(e) => e.stopPropagation()}
       >
         <img
-          src={image.url}
+          src={resolvedUrl}
           alt={image.title}
+          onError={(e) => {
+            const target = e.currentTarget;
+            if (!target.dataset.triedFallback && image.url && !image.url.startsWith('data:')) {
+              target.dataset.triedFallback = 'true';
+              const baseUrl = API_URL.replace(/\/+$/, "");
+              target.src = `${baseUrl}/upload/view?url=${encodeURIComponent(image.url)}`;
+            }
+          }}
           className="max-h-full max-w-full object-contain rounded-xl shadow-2xl border border-white/10 select-none"
         />
       </div>
