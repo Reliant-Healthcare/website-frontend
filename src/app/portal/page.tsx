@@ -7,7 +7,7 @@ import {
   Loader2, AlertCircle, Lock, ChevronRight, LogOut, User,
   Shield, Bell, KeyRound, BookOpen, Video, Award, Settings,
   Check, Play, ArrowRight, BookOpenCheck, ChevronLeft, Printer,
-  MessageSquare, Sparkles, Bot, Send, ShieldAlert, Plus, Trash2,
+  MessageSquare, Sparkles, Bot, Send, ShieldAlert, Plus, Trash2, Save,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -109,6 +109,8 @@ function PortalContent() {
   const { data: applications = [], isLoading: isLoadingApps } = useQuery({
     queryKey: ["my-applications"],
     queryFn: () => applicationsApi.getMyApplications(),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   // Query training courses
@@ -1506,17 +1508,30 @@ function ApplicationCard({ application }: { application: any }) {
                   {config.label}
                 </span>
 
+                {/* Draft saved indicator */}
+                {doc.status === "PENDING" && doc.formData && typeof doc.formData === "object" && Object.keys(doc.formData).length > 0 && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hidden md:inline-flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    Draft Saved
+                  </span>
+                )}
+
                 <div className="flex items-center gap-2">
                   {/* Web Form or PDF actions */}
                   {(doc.section?.type === "WEB_FORM" || doc.section?.type === "BOTH") && (
                     <>
                       {(doc.status === "PENDING" || doc.status === "REJECTED") && !doc.uploadedFileUrl && (
                         <button
-                          onClick={() => setFillingFormDoc(doc)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+                          onClick={() => {
+                            queryClient.invalidateQueries({ queryKey: ["my-applications"] });
+                            setFillingFormDoc(doc);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors shadow-sm"
                         >
                           <FileText className="w-3.5 h-3.5" />
-                          {doc.status === "REJECTED" ? "Re-fill Form" : "Fill Online"}
+                          {doc.status === "REJECTED"
+                            ? "Re-fill Form"
+                            : (doc.formData && Object.keys(doc.formData).length > 0 ? "Resume Form" : "Fill Online")}
                         </button>
                       )}
                       {doc.formData && (doc.status === "UPLOADED" || doc.status === "APPROVED") && (
@@ -1640,11 +1655,28 @@ function WebFormModal({
   const isReadOnly = doc.status === "UPLOADED" || doc.status === "APPROVED";
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
 
-  const formSchema = Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : [];
+  // Always resolve latest form schema from parent application or current doc
+  const currentDoc = application?.documents?.find((d: any) => d.id === doc.id || d.sectionId === doc.sectionId) || doc;
+  const formSchema = Array.isArray(currentDoc?.section?.formSchema) && currentDoc.section.formSchema.length > 0
+    ? currentDoc.section.formSchema
+    : (Array.isArray(doc.section?.formSchema) ? doc.section.formSchema : []);
 
   const [formData, setFormData] = useState<Record<string, any>>(() => {
-    const initial = { ...(doc.formData || {}) };
+    const localDraftKey = `reliant_form_draft_${applicationId}_${doc.sectionId}`;
+    let localDraft: any = null;
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem(localDraftKey);
+        if (stored) localDraft = JSON.parse(stored);
+      }
+    } catch {}
+
+    const initial = {
+      ...(doc.formData || {}),
+      ...(localDraft || {}),
+    };
 
     // ── Smart Cross-Form Candidate Identity Extraction (Strict Whitelist) ────
     // Only extracts the applicant's genuine personal identity and demographics.
@@ -2085,9 +2117,25 @@ function WebFormModal({
     return initial;
   });
 
+  // Auto-save progress to local storage continuously on changes
+  useEffect(() => {
+    if (isReadOnly) return;
+    const key = `reliant_form_draft_${applicationId}_${doc.sectionId}`;
+    try {
+      if (typeof window !== 'undefined' && Object.keys(formData).length > 0) {
+        localStorage.setItem(key, JSON.stringify(formData));
+      }
+    } catch {}
+  }, [formData, applicationId, doc.sectionId, isReadOnly]);
+
   const submitMutation = useMutation({
-    mutationFn: (data: any) => applicationsApi.submitWebForm(applicationId, doc.sectionId, data),
+    mutationFn: (data: any) => applicationsApi.submitWebForm(applicationId, doc.sectionId, data, false),
     onSuccess: () => {
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem(`reliant_form_draft_${applicationId}_${doc.sectionId}`);
+        }
+      } catch {}
       if (formData.signature && typeof formData.signature === 'string' && formData.signature.startsWith('data:image/')) {
         try {
           if (typeof window !== 'undefined') {
@@ -2099,6 +2147,33 @@ function WebFormModal({
       onClose();
     },
   });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: (data: any) => applicationsApi.submitWebForm(applicationId, doc.sectionId, data, true),
+    onSuccess: () => {
+      try {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`reliant_form_draft_${applicationId}_${doc.sectionId}`, JSON.stringify(formData));
+        }
+      } catch {}
+      if (formData.signature && typeof formData.signature === 'string' && formData.signature.startsWith('data:image/')) {
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('reliant_applicant_signature', formData.signature);
+          }
+        } catch {}
+      }
+      queryClient.invalidateQueries({ queryKey: ["my-applications"] });
+      setSaveSuccessMessage("Progress saved! You can close and return anytime.");
+      setTimeout(() => setSaveSuccessMessage(null), 4000);
+    },
+  });
+
+  const handleSaveDraft = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (isReadOnly) return;
+    saveDraftMutation.mutate(formData);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2130,6 +2205,17 @@ function WebFormModal({
             <XCircle className="w-5 h-5 text-muted-foreground hover:text-foreground" />
           </button>
         </div>
+
+        {saveSuccessMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mx-6 mt-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-medium flex items-center gap-2 shrink-0"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            {saveSuccessMessage}
+          </motion.div>
+        )}
 
         <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
           {formSchema.length === 0 ? (
@@ -2646,14 +2732,25 @@ function WebFormModal({
               </button>
             )}
             {!isReadOnly && (
-              <button
-                type="submit"
-                disabled={submitMutation.isPending || !!uploadingField}
-                className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-semibold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                {submitMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Submit Form
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={saveDraftMutation.isPending || submitMutation.isPending || !!uploadingField}
+                  onClick={handleSaveDraft}
+                  className="flex-1 border border-primary/30 text-primary hover:bg-primary/5 py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {saveDraftMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Draft
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitMutation.isPending || saveDraftMutation.isPending || !!uploadingField}
+                  className="flex-1 bg-primary text-primary-foreground py-3 rounded-lg font-semibold text-sm hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {submitMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Submit Form
+                </button>
+              </>
             )}
           </div>
         </form>

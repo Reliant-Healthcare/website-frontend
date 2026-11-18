@@ -125,10 +125,10 @@ export const applicationsApi = {
     });
   },
 
-  submitWebForm: (applicationId: string, sectionId: string, formData: any) =>
+  submitWebForm: (applicationId: string, sectionId: string, formData: any, isDraft: boolean = false) =>
     apiFetch(`/applications/${applicationId}/documents/${sectionId}/submit-form`, {
       method: 'POST',
-      body: JSON.stringify({ formData }),
+      body: JSON.stringify({ formData, isDraft }),
     }),
 
   updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string) =>
