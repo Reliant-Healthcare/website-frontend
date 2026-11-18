@@ -15,6 +15,7 @@ import { applicationsApi, authApi, coursesApi, aiApi } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
 import SignaturePad from "@/components/SignaturePad";
+import DatePicker from "@/components/DatePicker";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
@@ -2175,6 +2176,12 @@ function WebFormModal({
     saveDraftMutation.mutate(formData);
   };
 
+  const [noncitizenDocType, setNoncitizenDocType] = useState<'uscis' | 'i94' | 'passport'>(() => {
+    if (formData.i94_admission_number) return 'i94';
+    if (formData.foreign_passport_number || formData.foreign_passport_country) return 'passport';
+    return 'uscis';
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return onClose();
@@ -2222,6 +2229,26 @@ function WebFormModal({
             <p className="text-muted-foreground text-center py-10">This form has no fields configured.</p>
           ) : (
             formSchema.map((field: any) => {
+              // Check field dependencies if configured
+              if (field.dependsOn) {
+                const targetVal = String(formData[field.dependsOn.field] || "").toLowerCase();
+                const allowed = Array.isArray(field.dependsOn.value) ? field.dependsOn.value : [field.dependsOn.value];
+                const isMatch = allowed.some((v: string) => targetVal.includes(String(v).toLowerCase()));
+                if (!isMatch) return null;
+              }
+
+              // Hide standalone I-9 immigration fields so they render cleanly inside citizenship_status
+              const I9_IMMIGRATION_FIELDS = [
+                'uscis_number',
+                'work_auth_expiration',
+                'i94_admission_number',
+                'foreign_passport_number',
+                'foreign_passport_country',
+              ];
+              if (I9_IMMIGRATION_FIELDS.includes(field.id)) {
+                return null;
+              }
+
               // ── Header / Section Banner ──────────────────────────────────
               if (field.type === "section_header") {
                 return (
@@ -2594,20 +2621,197 @@ function WebFormModal({
                   </label>
 
                   {field.type === "select" ? (
-                    <select
-                      required={field.required && !isReadOnly}
-                      disabled={isReadOnly}
-                      value={formData[field.id] || ""}
-                      onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
-                      className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background disabled:opacity-70 text-sm"
-                    >
-                      <option value="">-- Please Select --</option>
-                      {field.options?.map((opt: string) => (
-                        <option key={opt} value={opt}>
-                          {opt}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="space-y-3">
+                      <select
+                        required={field.required && !isReadOnly}
+                        disabled={isReadOnly}
+                        value={formData[field.id] || ""}
+                        onChange={(e) => setFormData({ ...formData, [field.id]: e.target.value })}
+                        className="w-full border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background disabled:opacity-70 text-sm font-medium"
+                      >
+                        <option value="">-- Please Select --</option>
+                        {field.options?.map((opt: string) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* ── Form I-9 Conditional Citizenship Fields ─────────── */}
+                      {field.id === "citizenship_status" && (
+                        <div className="mt-3">
+                          {/* 1. Citizen or 2. Noncitizen National */}
+                          {(formData.citizenship_status?.includes("1.") ||
+                            formData.citizenship_status?.toLowerCase().includes("citizen of the united states") ||
+                            formData.citizenship_status?.includes("2.") ||
+                            formData.citizenship_status?.toLowerCase().includes("noncitizen national")) && (
+                            <div className="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>
+                                As a U.S. Citizen / Noncitizen National, no USCIS number, work authorization expiration date, or foreign passport details are required for Section 1.
+                              </span>
+                            </div>
+                          )}
+
+                          {/* 3. Lawful Permanent Resident */}
+                          {(formData.citizenship_status?.includes("3.") ||
+                            formData.citizenship_status?.toLowerCase().includes("lawful permanent resident")) && (
+                            <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 space-y-2">
+                              <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                                <span>USCIS / Alien Registration Number (A-Number) <span className="text-red-500">*</span></span>
+                                <span className="text-[11px] text-muted-foreground font-normal">7 to 9 digits</span>
+                              </label>
+                              <input
+                                type="text"
+                                disabled={isReadOnly}
+                                value={formData.uscis_number || ""}
+                                onChange={(e) => setFormData({ ...formData, uscis_number: e.target.value })}
+                                placeholder="e.g. 123456789"
+                                className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                              />
+                              <p className="text-[11px] text-muted-foreground">
+                                Lawful permanent residents must enter your 7- to 9-digit Alien Registration Number (A-Number) or USCIS Number.
+                              </p>
+                            </div>
+                          )}
+
+                          {/* 4. Noncitizen Authorized to Work */}
+                          {(formData.citizenship_status?.includes("4.") ||
+                            formData.citizenship_status?.toLowerCase().includes("noncitizen authorized to work")) && (
+                            <div className="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 space-y-4">
+                              {/* Work Authorization Expiration Date */}
+                              <div className="space-y-1.5">
+                                <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                                  <span>Work Authorization Expiration Date</span>
+                                  <span className="text-[11px] text-muted-foreground font-normal">mm/dd/yyyy</span>
+                                </label>
+                                <DatePicker
+                                  value={formData.work_auth_expiration || ""}
+                                  onChange={(val) => setFormData({ ...formData, work_auth_expiration: val })}
+                                  disabled={isReadOnly}
+                                  placeholder="Select expiration date (or leave blank if N/A)"
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                  Enter the expiration date of your employment authorization document. If your employment authorization does not have an expiration date (e.g. refugees, asylees), leave blank.
+                                </p>
+                              </div>
+
+                              {/* Document Identifier Selection (1 of 3) */}
+                              <div className="pt-2 border-t border-blue-200/60 dark:border-blue-900/40 space-y-3">
+                                <div>
+                                  <label className="text-xs font-bold text-foreground block">
+                                    Document Identification <span className="text-red-500">*</span>
+                                  </label>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    Noncitizens authorized to work must provide <strong>ONE</strong> of the following 3 document identifiers:
+                                  </p>
+                                </div>
+
+                                {/* 3 tabs / selector */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={isReadOnly}
+                                    onClick={() => setNoncitizenDocType("uscis")}
+                                    className={`p-2.5 rounded-lg border text-xs font-semibold text-left transition-all ${
+                                      noncitizenDocType === "uscis"
+                                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                                    }`}
+                                  >
+                                    1. USCIS / A-Number
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isReadOnly}
+                                    onClick={() => setNoncitizenDocType("i94")}
+                                    className={`p-2.5 rounded-lg border text-xs font-semibold text-left transition-all ${
+                                      noncitizenDocType === "i94"
+                                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                                    }`}
+                                  >
+                                    2. Form I-94 Number
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isReadOnly}
+                                    onClick={() => setNoncitizenDocType("passport")}
+                                    className={`p-2.5 rounded-lg border text-xs font-semibold text-left transition-all ${
+                                      noncitizenDocType === "passport"
+                                        ? "border-primary bg-primary/10 text-primary shadow-sm"
+                                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                                    }`}
+                                  >
+                                    3. Foreign Passport
+                                  </button>
+                                </div>
+
+                                {/* Inputs based on selected document type */}
+                                {noncitizenDocType === "uscis" && (
+                                  <div className="space-y-1.5 pt-1">
+                                    <label className="text-xs font-semibold text-foreground">
+                                      USCIS / Alien Registration Number (A-Number)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      disabled={isReadOnly}
+                                      value={formData.uscis_number || ""}
+                                      onChange={(e) => setFormData({ ...formData, uscis_number: e.target.value })}
+                                      placeholder="e.g. 123456789"
+                                      className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                    />
+                                  </div>
+                                )}
+
+                                {noncitizenDocType === "i94" && (
+                                  <div className="space-y-1.5 pt-1">
+                                    <label className="text-xs font-semibold text-foreground">
+                                      Form I-94 Admission Number (11 digits)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      disabled={isReadOnly}
+                                      value={formData.i94_admission_number || ""}
+                                      onChange={(e) => setFormData({ ...formData, i94_admission_number: e.target.value })}
+                                      placeholder="e.g. 12345678901"
+                                      className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                    />
+                                  </div>
+                                )}
+
+                                {noncitizenDocType === "passport" && (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-foreground">Foreign Passport Number</label>
+                                      <input
+                                        type="text"
+                                        disabled={isReadOnly}
+                                        value={formData.foreign_passport_number || ""}
+                                        onChange={(e) => setFormData({ ...formData, foreign_passport_number: e.target.value })}
+                                        placeholder="Passport #"
+                                        className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background font-mono focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-foreground">Country of Issuance</label>
+                                      <input
+                                        type="text"
+                                        disabled={isReadOnly}
+                                        value={formData.foreign_passport_country || ""}
+                                        onChange={(e) => setFormData({ ...formData, foreign_passport_country: e.target.value })}
+                                        placeholder="e.g. Canada, Mexico, UK"
+                                        className="w-full border rounded-lg px-3.5 py-2.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ) : field.type === "textarea" ? (
                     <textarea
                       required={field.required && !isReadOnly}
@@ -2690,9 +2894,17 @@ function WebFormModal({
                         </div>
                       )}
                     </div>
+                  ) : field.type === "date" ? (
+                    <DatePicker
+                      value={formData[field.id] || ""}
+                      onChange={(val) => setFormData({ ...formData, [field.id]: val })}
+                      disabled={isReadOnly}
+                      required={field.required && !isReadOnly}
+                      placeholder={`Select ${field.label?.toLowerCase() || 'date'}...`}
+                    />
                   ) : (
                     <input
-                      type={field.type === "date" ? "date" : "text"}
+                      type="text"
                       required={field.required && !isReadOnly}
                       disabled={isReadOnly}
                       value={formData[field.id] || ""}

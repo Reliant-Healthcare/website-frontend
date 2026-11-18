@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { applicationsApi, documentSectionsApi, aiApi } from "@/lib/api";
 import SignaturePad from "@/components/SignaturePad";
+import DatePicker from "@/components/DatePicker";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
@@ -1018,6 +1019,23 @@ function ReviewDocumentModal({
                   <p className="text-sm text-muted-foreground italic">No fields configured or submitted on this form.</p>
                 ) : (
                   formSchema.map((field: any) => {
+                    // Check field dependencies if configured (or if I-9 conditional and not applicable)
+                    const cit = String(formData.citizenship_status || "").toLowerCase();
+                    const isI9ImmigrationField = ['uscis_number', 'work_auth_expiration', 'i94_admission_number', 'foreign_passport_number', 'foreign_passport_country'].includes(field.id);
+                    if (isI9ImmigrationField) {
+                      if ((cit.includes('1.') || cit.includes('2.')) && !formData[field.id]) {
+                        return null; // Not applicable for US Citizens / Noncitizen Nationals
+                      }
+                      if (cit.includes('3.') && field.id !== 'uscis_number' && !formData[field.id]) {
+                        return null; // Only USCIS number applies to LPR
+                      }
+                    }
+                    if (field.dependsOn) {
+                      const targetVal = String(formData[field.dependsOn.field] || "").toLowerCase();
+                      const allowed = Array.isArray(field.dependsOn.value) ? field.dependsOn.value : [field.dependsOn.value];
+                      const isMatch = allowed.some((v: string) => targetVal.includes(String(v).toLowerCase()));
+                      if (!isMatch && !formData[field.id]) return null;
+                    }
                     const val = formData[field.id];
                     return (
                       <div key={field.id} className="space-y-1 pb-3 border-b border-border/60 last:border-0 last:pb-0">
@@ -1201,11 +1219,10 @@ function ReviewDocumentModal({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-semibold text-foreground">First Day of Employment (Hire Date)</label>
-                      <input
-                        type="date"
+                      <DatePicker
                         value={i9EmployerData.firstDayOfEmployment}
-                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, firstDayOfEmployment: e.target.value })}
-                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                        onChange={(val) => setI9EmployerData({ ...i9EmployerData, firstDayOfEmployment: val })}
+                        className="mt-1"
                       />
                     </div>
                     <div>
@@ -1246,12 +1263,10 @@ function ReviewDocumentModal({
                         onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_number: e.target.value })}
                         className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
                       />
-                      <input
-                        type="date"
-                        placeholder="Expiration Date"
+                      <DatePicker
                         value={i9EmployerData.listA_expiration}
-                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_expiration: e.target.value })}
-                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                        onChange={(val) => setI9EmployerData({ ...i9EmployerData, listA_expiration: val })}
+                        placeholder="Expiration Date"
                       />
                     </div>
 
@@ -1279,12 +1294,10 @@ function ReviewDocumentModal({
                         onChange={(e) => setI9EmployerData({ ...i9EmployerData, listB_number: e.target.value })}
                         className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
                       />
-                      <input
-                        type="date"
-                        placeholder="Expiration Date"
+                      <DatePicker
                         value={i9EmployerData.listB_expiration}
-                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listB_expiration: e.target.value })}
-                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                        onChange={(val) => setI9EmployerData({ ...i9EmployerData, listB_expiration: val })}
+                        placeholder="Expiration Date"
                       />
                     </div>
 
@@ -1312,12 +1325,10 @@ function ReviewDocumentModal({
                         onChange={(e) => setI9EmployerData({ ...i9EmployerData, listC_number: e.target.value })}
                         className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
                       />
-                      <input
-                        type="date"
-                        placeholder="Expiration Date"
+                      <DatePicker
                         value={i9EmployerData.listC_expiration}
-                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, listC_expiration: e.target.value })}
-                        className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                        onChange={(val) => setI9EmployerData({ ...i9EmployerData, listC_expiration: val })}
+                        placeholder="Expiration Date"
                       />
                     </div>
                   </div>
@@ -1569,11 +1580,10 @@ function ReviewDocumentModal({
                       </div>
                       <div>
                         <label className="text-xs font-semibold text-foreground">Verification Date</label>
-                        <input
-                          type="date"
+                        <DatePicker
                           value={refAdminData.verificationDate}
-                          onChange={(e) => setRefAdminData({ ...refAdminData, verificationDate: e.target.value })}
-                          className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                          onChange={(val) => setRefAdminData({ ...refAdminData, verificationDate: val })}
+                          className="mt-1"
                         />
                       </div>
                     </div>
@@ -1634,11 +1644,10 @@ function ReviewDocumentModal({
               Expiration Date
               <span className="text-xs font-normal text-muted-foreground">(Optional – for compliance tracking/reminders)</span>
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={expirationDate}
-              onChange={(e) => setExpirationDate(e.target.value)}
-              className="w-full border rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all bg-background text-foreground"
+              onChange={(val) => setExpirationDate(val)}
+              placeholder="Select document expiration date..."
             />
           </div>
 
