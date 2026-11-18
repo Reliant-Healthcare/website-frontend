@@ -8,6 +8,7 @@ import {
   Shield, Bell, KeyRound, BookOpen, Video, Award, Settings,
   Check, Play, ArrowRight, BookOpenCheck, ChevronLeft, Printer,
   MessageSquare, Sparkles, Bot, Send, ShieldAlert, Plus, Trash2, Save,
+  ZoomIn, Eye, ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,6 +20,36 @@ import DatePicker from "@/components/DatePicker";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+
+const resolveMediaUrl = (url?: string | null) => {
+  if (!url || typeof url !== "string") return "";
+  if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("data:")) return url;
+  const baseUrl = API_URL.replace(/\/+$/, "");
+  const cleanPath = url.startsWith("/") ? url : `/${url}`;
+  return `${baseUrl}${cleanPath}`;
+};
+
+const cacheUploadedScan = (fieldId: string, url: string) => {
+  if (!url || typeof window === "undefined") return;
+  try {
+    const fLower = (fieldId || "").toLowerCase();
+    const existing = JSON.parse(localStorage.getItem("reliant_candidate_scans") || "{}");
+    if (fLower === "id_card_front" || fLower === "id_doc_front" || fLower === "drivers_license_front" || fLower === "photo_id_front" || fLower === "driver_license") {
+      existing.id_front = url;
+    } else if (fLower === "id_card_back" || fLower === "id_doc_back" || fLower === "drivers_license_back" || fLower === "photo_id_back") {
+      existing.id_back = url;
+    } else if (fLower === "ssn_card_front" || fLower === "work_auth_doc" || fLower === "ssn_card" || fLower === "social_security_card") {
+      existing.ssn_front = url;
+    } else if (fLower === "ssn_card_back") {
+      existing.ssn_back = url;
+    } else if (fLower === "voided_check_file" || fLower === "direct_deposit_proof") {
+      existing.voided_check = url;
+    } else if (fLower === "tb_clearance_file") {
+      existing.tb_clearance = url;
+    }
+    localStorage.setItem("reliant_candidate_scans", JSON.stringify(existing));
+  } catch {}
+};
 
 const statusConfig: Record<string, { color: string; bgColor: string; icon: any; label: string }> = {
   PENDING: { color: "text-amber-700", bgColor: "bg-amber-50 border-amber-200", icon: Clock, label: "Awaiting Upload" },
@@ -1657,6 +1688,7 @@ function WebFormModal({
   const [uploadingField, setUploadingField] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [previewModalImage, setPreviewModalImage] = useState<{ url: string; title: string } | null>(null);
 
   // Always resolve latest form schema from parent application or current doc
   const currentDoc = application?.documents?.find((d: any) => d.id === doc.id || d.sectionId === doc.sectionId) || doc;
@@ -1719,6 +1751,100 @@ function WebFormModal({
         }
       });
     }
+
+    // ── Smart Cross-Form Document & ID Scan Extraction ────
+    // Gathers uploaded documents (Photo ID front/back, SSN card, work auth, voided check, TB clearance)
+    // from other application documents, saved drafts, and local storage cache.
+    const candidateScans: Record<string, string> = {};
+
+    // 1. Check local storage persistent scans cache
+    try {
+      if (typeof window !== 'undefined') {
+        const cachedScans = localStorage.getItem('reliant_candidate_scans');
+        if (cachedScans) {
+          const parsed = JSON.parse(cachedScans);
+          if (parsed && typeof parsed === 'object') {
+            Object.assign(candidateScans, parsed);
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Scan all documents in the application (formData and uploadedFileUrl)
+    if (Array.isArray(application?.documents)) {
+      application.documents.forEach((d: any) => {
+        // Check formData from other forms
+        if (d.formData && typeof d.formData === 'object') {
+          // Photo ID Front
+          if (d.formData.id_card_front && !candidateScans.id_front) candidateScans.id_front = d.formData.id_card_front;
+          if (d.formData.id_doc_front && !candidateScans.id_front) candidateScans.id_front = d.formData.id_doc_front;
+          if (d.formData.drivers_license_front && !candidateScans.id_front) candidateScans.id_front = d.formData.drivers_license_front;
+          if (d.formData.photo_id_front && !candidateScans.id_front) candidateScans.id_front = d.formData.photo_id_front;
+
+          // Photo ID Back
+          if (d.formData.id_card_back && !candidateScans.id_back) candidateScans.id_back = d.formData.id_card_back;
+          if (d.formData.id_doc_back && !candidateScans.id_back) candidateScans.id_back = d.formData.id_doc_back;
+          if (d.formData.drivers_license_back && !candidateScans.id_back) candidateScans.id_back = d.formData.drivers_license_back;
+          if (d.formData.photo_id_back && !candidateScans.id_back) candidateScans.id_back = d.formData.photo_id_back;
+
+          // SSN / Work Auth Front
+          if (d.formData.ssn_card_front && !candidateScans.ssn_front) candidateScans.ssn_front = d.formData.ssn_card_front;
+          if (d.formData.work_auth_doc && !candidateScans.ssn_front) candidateScans.ssn_front = d.formData.work_auth_doc;
+          if (d.formData.ssn_card && !candidateScans.ssn_front) candidateScans.ssn_front = d.formData.ssn_card;
+          if (d.formData.social_security_card && !candidateScans.ssn_front) candidateScans.ssn_front = d.formData.social_security_card;
+
+          // SSN Back
+          if (d.formData.ssn_card_back && !candidateScans.ssn_back) candidateScans.ssn_back = d.formData.ssn_card_back;
+
+          // Voided Check / Direct Deposit
+          if (d.formData.voided_check_file && !candidateScans.voided_check) candidateScans.voided_check = d.formData.voided_check_file;
+          if (d.formData.direct_deposit_proof && !candidateScans.voided_check) candidateScans.voided_check = d.formData.direct_deposit_proof;
+
+          // TB Clearance
+          if (d.formData.tb_clearance_file && !candidateScans.tb_clearance) candidateScans.tb_clearance = d.formData.tb_clearance_file;
+        }
+
+        // Also check direct document uploads if any
+        if (d.uploadedFileUrl && typeof d.uploadedFileUrl === 'string') {
+          const secName = (d.section?.name || '').toLowerCase();
+          if ((secName.includes('driver') || secName.includes('license') || secName.includes('photo id') || secName.includes('state id')) && !candidateScans.id_front) {
+            candidateScans.id_front = d.uploadedFileUrl;
+          } else if ((secName.includes('social security') || secName.includes('ssn') || secName.includes('work auth')) && !candidateScans.ssn_front) {
+            candidateScans.ssn_front = d.uploadedFileUrl;
+          } else if ((secName.includes('voided check') || secName.includes('direct deposit')) && !candidateScans.voided_check) {
+            candidateScans.voided_check = d.uploadedFileUrl;
+          } else if ((secName.includes('tb') || secName.includes('ppd') || secName.includes('physical')) && !candidateScans.tb_clearance) {
+            candidateScans.tb_clearance = d.uploadedFileUrl;
+          }
+        }
+      });
+    }
+
+    // 3. Also check unsaved drafts in localStorage
+    try {
+      if (typeof window !== 'undefined') {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(`reliant_form_draft_${applicationId}_`)) {
+            const rawDraft = localStorage.getItem(k);
+            if (rawDraft) {
+              const draftData = JSON.parse(rawDraft);
+              if (draftData && typeof draftData === 'object') {
+                if (draftData.id_card_front && !candidateScans.id_front) candidateScans.id_front = draftData.id_card_front;
+                if (draftData.id_doc_front && !candidateScans.id_front) candidateScans.id_front = draftData.id_doc_front;
+                if (draftData.id_card_back && !candidateScans.id_back) candidateScans.id_back = draftData.id_card_back;
+                if (draftData.id_doc_back && !candidateScans.id_back) candidateScans.id_back = draftData.id_doc_back;
+                if (draftData.ssn_card_front && !candidateScans.ssn_front) candidateScans.ssn_front = draftData.ssn_card_front;
+                if (draftData.work_auth_doc && !candidateScans.ssn_front) candidateScans.ssn_front = draftData.work_auth_doc;
+                if (draftData.ssn_card_back && !candidateScans.ssn_back) candidateScans.ssn_back = draftData.ssn_card_back;
+                if (draftData.voided_check_file && !candidateScans.voided_check) candidateScans.voided_check = draftData.voided_check_file;
+                if (draftData.tb_clearance_file && !candidateScans.tb_clearance) candidateScans.tb_clearance = draftData.tb_clearance_file;
+              }
+            }
+          }
+        }
+      }
+    } catch {}
 
     const firstName = (
       initial.first_name ||
@@ -2112,6 +2238,22 @@ function WebFormModal({
             initial[id] = savedSignature;
           }
         }
+        // Document & ID Scan prefill (Driver's License, SSN Card, Work Authorization, etc.)
+        else if (field.type === 'file' || field.type === 'file_upload') {
+          if (idLower === 'id_card_front' || idLower === 'id_doc_front' || idLower === 'drivers_license_front' || idLower === 'photo_id_front' || idLower === 'driver_license') {
+            if (candidateScans.id_front) initial[id] = candidateScans.id_front;
+          } else if (idLower === 'id_card_back' || idLower === 'id_doc_back' || idLower === 'drivers_license_back' || idLower === 'photo_id_back') {
+            if (candidateScans.id_back) initial[id] = candidateScans.id_back;
+          } else if (idLower === 'ssn_card_front' || idLower === 'work_auth_doc' || idLower === 'ssn_card' || idLower === 'social_security_card') {
+            if (candidateScans.ssn_front) initial[id] = candidateScans.ssn_front;
+          } else if (idLower === 'ssn_card_back') {
+            if (candidateScans.ssn_back) initial[id] = candidateScans.ssn_back;
+          } else if (idLower === 'voided_check_file' || idLower === 'direct_deposit_proof') {
+            if (candidateScans.voided_check) initial[id] = candidateScans.voided_check;
+          } else if (idLower === 'tb_clearance_file') {
+            if (candidateScans.tb_clearance) initial[id] = candidateScans.tb_clearance;
+          }
+        }
       }
     });
 
@@ -2144,6 +2286,21 @@ function WebFormModal({
           }
         } catch {}
       }
+      try {
+        if (typeof window !== 'undefined') {
+          const existing = JSON.parse(localStorage.getItem('reliant_candidate_scans') || '{}');
+          if (formData.id_card_front) existing.id_front = formData.id_card_front;
+          if (formData.id_doc_front) existing.id_front = formData.id_doc_front;
+          if (formData.id_card_back) existing.id_back = formData.id_card_back;
+          if (formData.id_doc_back) existing.id_back = formData.id_doc_back;
+          if (formData.ssn_card_front) existing.ssn_front = formData.ssn_card_front;
+          if (formData.work_auth_doc) existing.ssn_front = formData.work_auth_doc;
+          if (formData.ssn_card_back) existing.ssn_back = formData.ssn_card_back;
+          if (formData.voided_check_file) existing.voided_check = formData.voided_check_file;
+          if (formData.tb_clearance_file) existing.tb_clearance = formData.tb_clearance_file;
+          localStorage.setItem('reliant_candidate_scans', JSON.stringify(existing));
+        }
+      } catch {}
       queryClient.invalidateQueries({ queryKey: ["my-applications"] });
       onClose();
     },
@@ -2164,6 +2321,21 @@ function WebFormModal({
           }
         } catch {}
       }
+      try {
+        if (typeof window !== 'undefined') {
+          const existing = JSON.parse(localStorage.getItem('reliant_candidate_scans') || '{}');
+          if (formData.id_card_front) existing.id_front = formData.id_card_front;
+          if (formData.id_doc_front) existing.id_front = formData.id_doc_front;
+          if (formData.id_card_back) existing.id_back = formData.id_card_back;
+          if (formData.id_doc_back) existing.id_back = formData.id_doc_back;
+          if (formData.ssn_card_front) existing.ssn_front = formData.ssn_card_front;
+          if (formData.work_auth_doc) existing.ssn_front = formData.work_auth_doc;
+          if (formData.ssn_card_back) existing.ssn_back = formData.ssn_card_back;
+          if (formData.voided_check_file) existing.voided_check = formData.voided_check_file;
+          if (formData.tb_clearance_file) existing.tb_clearance = formData.tb_clearance_file;
+          localStorage.setItem('reliant_candidate_scans', JSON.stringify(existing));
+        }
+      } catch {}
       queryClient.invalidateQueries({ queryKey: ["my-applications"] });
       setSaveSuccessMessage("Progress saved! You can close and return anytime.");
       setTimeout(() => setSaveSuccessMessage(null), 4000);
@@ -2840,27 +3012,92 @@ function WebFormModal({
                     />
                   ) : field.type === "file" || field.type === "file_upload" ? (
                     <div className="space-y-2">
-                      {formData[field.id] ? (
-                        <div className="flex items-center justify-between p-3 border rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-xs">
-                          <div className="flex items-center gap-2 truncate">
-                            <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span className="font-semibold text-emerald-900 dark:text-emerald-300 truncate">
-                              {typeof formData[field.id] === 'string' && formData[field.id].startsWith('data:image')
-                                ? 'Uploaded Document Scan'
-                                : formData[field.id].split('/').pop() || 'Uploaded Document'}
-                            </span>
+                      {formData[field.id] ? (() => {
+                        const val = formData[field.id];
+                        const valStr = typeof val === 'string' ? val : '';
+                        const resolvedUrl = resolveMediaUrl(valStr);
+                        const isImage = valStr.startsWith('data:image') || !!valStr.match(/\.(jpg|jpeg|png|webp|gif|bmp|svg)($|\?)/i);
+                        const isPdf = valStr.startsWith('data:application/pdf') || !!valStr.match(/\.pdf($|\?)/i);
+                        const fileName = valStr.startsWith('data:')
+                          ? (isPdf ? 'Attached Document.pdf' : 'Attached Document Scan.jpg')
+                          : valStr.split('/').pop()?.split('?')[0] || 'Attached Document';
+
+                        return (
+                          <div className="rounded-xl border border-emerald-200 dark:border-emerald-800/80 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 sm:p-3.5 transition-all shadow-xs">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                {isImage ? (
+                                  <div
+                                    onClick={() => setPreviewModalImage({ url: resolvedUrl, title: field.label || "Document Scan" })}
+                                    className="group relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden border border-border bg-white dark:bg-zinc-800 shadow-xs cursor-pointer shrink-0 transition-transform hover:scale-105"
+                                    title="Click to preview full scan"
+                                  >
+                                    <img
+                                      src={resolvedUrl}
+                                      alt={field.label || "Document preview"}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                      <ZoomIn className="w-4 h-4 drop-shadow" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50 dark:bg-red-950/40 flex flex-col items-center justify-center shrink-0 text-red-600 dark:text-red-400">
+                                    <FileText className="w-6 h-6" />
+                                    <span className="text-[10px] font-bold uppercase mt-0.5 tracking-wider">PDF</span>
+                                  </div>
+                                )}
+
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300">
+                                      <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> Attached
+                                    </span>
+                                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[140px] sm:max-w-[200px]" title={fileName}>
+                                      {fileName}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-semibold text-foreground mt-1 truncate">
+                                    {field.label || "Document Attachment"}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {isImage ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setPreviewModalImage({ url: resolvedUrl, title: field.label || "Document Scan" })}
+                                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                                      >
+                                        <Eye className="w-3 h-3" /> Preview Full Scan
+                                      </button>
+                                    ) : (
+                                      <a
+                                        href={resolvedUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                                      >
+                                        <ExternalLink className="w-3 h-3" /> Open PDF in New Tab
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {!isReadOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => setFormData({ ...formData, [field.id]: "" })}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors shrink-0 border border-transparent hover:border-red-200 dark:hover:border-red-900"
+                                  title="Remove / Replace file"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Replace</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          {!isReadOnly && (
-                            <button
-                              type="button"
-                              onClick={() => setFormData({ ...formData, [field.id]: "" })}
-                              className="text-red-600 font-semibold hover:underline text-xs"
-                            >
-                              Remove / Replace
-                            </button>
-                          )}
-                        </div>
-                      ) : (
+                        );
+                      })() : (
                         <div className="relative">
                           <input
                             type="file"
@@ -2874,10 +3111,13 @@ function WebFormModal({
                               try {
                                 const res = await applicationsApi.uploadGenericFile(file);
                                 setFormData((prev) => ({ ...prev, [field.id]: res.url }));
+                                cacheUploadedScan(field.id, res.url);
                               } catch (err) {
                                 const reader = new FileReader();
                                 reader.onload = (ev) => {
-                                  setFormData((prev) => ({ ...prev, [field.id]: ev.target?.result }));
+                                  const dataUrl = ev.target?.result as string;
+                                  setFormData((prev) => ({ ...prev, [field.id]: dataUrl }));
+                                  cacheUploadedScan(field.id, dataUrl);
                                 };
                                 reader.readAsDataURL(file);
                               } finally {
@@ -2967,6 +3207,128 @@ function WebFormModal({
           </div>
         </form>
       </motion.div>
+
+      {/* High-Resolution Document / Scan Lightbox Modal */}
+      <AnimatePresence>
+        {previewModalImage && (
+          <ImageLightboxModal
+            image={previewModalImage}
+            onClose={() => setPreviewModalImage(null)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ── High-Resolution Image Lightbox Modal ─────────────────────────────────────
+
+function ImageLightboxModal({
+  image,
+  onClose,
+}: {
+  image: { url: string; title: string };
+  onClose: () => void;
+}) {
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(image.url);
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      const cleanName = `${image.title.toLowerCase().replace(/[^a-z0-9]+/g, "_") || "document_scan"}.jpg`;
+      a.download = cleanName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(blobUrl);
+      document.body.removeChild(a);
+    } catch {
+      window.open(image.url, "_blank");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 bg-black/85 backdrop-blur-md z-[80] flex flex-col items-center justify-between p-4 sm:p-6"
+      onClick={onClose}
+    >
+      {/* Top Bar */}
+      <div
+        className="w-full max-w-5xl flex items-center justify-between gap-4 py-2.5 px-5 bg-card/90 dark:bg-card/90 border border-border/60 rounded-2xl backdrop-blur-md z-10 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <FileText className="w-4 h-4 text-primary shrink-0" />
+          <h3 className="text-sm sm:text-base font-bold truncate text-foreground">{image.title}</h3>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleDownload}
+            disabled={downloading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-xl hover:bg-primary/90 transition-all shadow-sm disabled:opacity-50"
+            title="Download full scan"
+          >
+            {downloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+            Download Scan
+          </button>
+          <a
+            href={image.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-muted text-foreground text-xs font-semibold rounded-xl hover:bg-muted/80 transition-all border"
+            title="Open full image in new tab"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Open New Tab</span>
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 hover:bg-muted rounded-xl transition-colors text-muted-foreground hover:text-foreground"
+            title="Close viewer (Esc)"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Image Container */}
+      <div
+        className="w-full max-w-5xl flex-1 flex items-center justify-center p-2 sm:p-4 min-h-0 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <img
+          src={image.url}
+          alt={image.title}
+          className="max-h-full max-w-full object-contain rounded-xl shadow-2xl border border-white/10 select-none"
+        />
+      </div>
+
+      {/* Bottom Hint */}
+      <div
+        className="text-xs text-white/70 bg-black/40 backdrop-blur-sm px-4 py-1.5 rounded-full border border-white/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        Press <kbd className="px-1.5 py-0.5 bg-white/20 rounded font-mono text-[10px]">Esc</kbd> or click anywhere outside to close
+      </div>
     </motion.div>
   );
 }
