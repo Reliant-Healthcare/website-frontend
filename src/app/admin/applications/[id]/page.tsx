@@ -583,6 +583,7 @@ function ReviewDocumentModal({
   onApprove: (notes: string, expirationDate?: string, adminOverrides?: any) => Promise<void>;
   onReject: (notes: string) => Promise<void>;
 }) {
+  const queryClient = useQueryClient();
   const [adminNotes, setAdminNotes] = useState(doc.adminNotes || "");
   const [expirationDate, setExpirationDate] = useState(doc.expirationDate ? new Date(doc.expirationDate).toISOString().split('T')[0] : "");
   const [isPending, setIsPending] = useState(false);
@@ -632,16 +633,35 @@ function ReviewDocumentModal({
   const isI9 = (doc.section?.name || "").toLowerCase().includes("i-9") || doc.section?.code === "I9";
   const isRef = (doc.section?.name || "").toLowerCase().includes("reference") || doc.section?.code === "REF";
   const initialOverrides = doc.formData?._adminOverrides || {};
+  const savedHrSig = typeof window !== "undefined" ? localStorage.getItem("reliant_hr_signature") || "" : "";
 
-  const [showEmployerVerification, setShowEmployerVerification] = useState(false);
+  const hasExistingI9Overrides = !!(
+    initialOverrides.listA_title ||
+    initialOverrides.listB_title ||
+    initialOverrides.listC_title ||
+    initialOverrides.firstDayOfEmployment ||
+    initialOverrides.employerSignature ||
+    initialOverrides.employerRepName
+  );
+  const [showEmployerVerification, setShowEmployerVerification] = useState(hasExistingI9Overrides);
+  const [showListA2, setShowListA2] = useState(!!initialOverrides.listA2_title);
+  const [showListA3, setShowListA3] = useState(!!initialOverrides.listA3_title);
   const [savingSignoff, setSavingSignoff] = useState(false);
   const [signoffSavedSuccess, setSignoffSavedSuccess] = useState(false);
 
-  const [i9EmployerData, setI9EmployerData] = useState({
+  const [i9EmployerData, setI9EmployerData] = useState(() => ({
     listA_title: initialOverrides.listA_title || "",
     listA_issuing: initialOverrides.listA_issuing || "",
     listA_number: initialOverrides.listA_number || "",
     listA_expiration: initialOverrides.listA_expiration || "",
+    listA2_title: initialOverrides.listA2_title || "",
+    listA2_issuing: initialOverrides.listA2_issuing || "",
+    listA2_number: initialOverrides.listA2_number || "",
+    listA2_expiration: initialOverrides.listA2_expiration || "",
+    listA3_title: initialOverrides.listA3_title || "",
+    listA3_issuing: initialOverrides.listA3_issuing || "",
+    listA3_number: initialOverrides.listA3_number || "",
+    listA3_expiration: initialOverrides.listA3_expiration || "",
     listB_title: initialOverrides.listB_title || "",
     listB_issuing: initialOverrides.listB_issuing || "",
     listB_number: initialOverrides.listB_number || "",
@@ -650,39 +670,52 @@ function ReviewDocumentModal({
     listC_issuing: initialOverrides.listC_issuing || "",
     listC_number: initialOverrides.listC_number || "",
     listC_expiration: initialOverrides.listC_expiration || "",
-    firstDayOfEmployment: initialOverrides.firstDayOfEmployment || new Date().toISOString().split("T")[0],
+    firstDayOfEmployment: initialOverrides.firstDayOfEmployment || "",
     employerRepName: initialOverrides.employerRepName || "Megan Smith, HR Administrator",
-  });
+    employerSignDate: initialOverrides.employerSignDate || new Date().toISOString().split("T")[0],
+    employerSignature: initialOverrides.employerSignature || savedHrSig || "",
+    additionalInformation: initialOverrides.additionalInformation || "",
+    altProcedure: !!initialOverrides.altProcedure,
+  }));
 
-  const [refAdminData, setRefAdminData] = useState(() => {
-    const savedHrSig = typeof window !== "undefined" ? localStorage.getItem("reliant_hr_signature") || "" : "";
-    return {
-      verifiedBy: initialOverrides.verifiedBy || "Megan Smith",
-      verifiedTitle: initialOverrides.verifiedTitle || "HR Administrator",
-      verificationDate: initialOverrides.verificationDate || new Date().toISOString().split("T")[0],
-      verificationMethod: initialOverrides.verificationMethod || "phone",
-      ratingQuality: initialOverrides.ratingQuality || "exceptional",
-      ratingClinical: initialOverrides.ratingClinical || "exceptional",
-      ratingAttendance: initialOverrides.ratingAttendance || "exceptional",
-      q1_knowPersonally: initialOverrides.q1_knowPersonally || "yes",
-      q2_howLongKnown: initialOverrides.q2_howLongKnown || "yes",
-      q3_dependable: initialOverrides.q3_dependable || "yes",
-      q4_honest: initialOverrides.q4_honest || "yes",
-      q5_communicates: initialOverrides.q5_communicates || "yes",
-      q6_responsibility: initialOverrides.q6_responsibility || "yes",
-      q7_recommend: initialOverrides.q7_recommend || "yes",
-      hrSignature: initialOverrides.hrSignature || savedHrSig || "",
-    };
-  });
+  const [refAdminData, setRefAdminData] = useState(() => ({
+    verifiedBy: initialOverrides.verifiedBy || "Megan Smith",
+    verifiedTitle: initialOverrides.verifiedTitle || "HR Administrator",
+    verificationDate: initialOverrides.verificationDate || new Date().toISOString().split("T")[0],
+    verificationMethod: initialOverrides.verificationMethod || "phone",
+    ratingQuality: initialOverrides.ratingQuality || "exceptional",
+    ratingClinical: initialOverrides.ratingClinical || "exceptional",
+    ratingAttendance: initialOverrides.ratingAttendance || "exceptional",
+    q1_knowPersonally: initialOverrides.q1_knowPersonally || "yes",
+    q2_howLongKnown: initialOverrides.q2_howLongKnown || "yes",
+    q3_dependable: initialOverrides.q3_dependable || "yes",
+    q4_honest: initialOverrides.q4_honest || "yes",
+    q5_communicates: initialOverrides.q5_communicates || "yes",
+    q6_responsibility: initialOverrides.q6_responsibility || "yes",
+    q7_recommend: initialOverrides.q7_recommend || "yes",
+    hrSignature: initialOverrides.hrSignature || savedHrSig || "",
+  }));
 
   const handleSaveSignoff = async () => {
     setSavingSignoff(true);
     setSignoffSavedSuccess(false);
     try {
       const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : {};
+      const hrSig = isI9 ? i9EmployerData.employerSignature : isRef ? refAdminData.hrSignature : "";
+      if (hrSig && typeof window !== "undefined") {
+        localStorage.setItem("reliant_hr_signature", hrSig);
+      }
+
       await applicationsApi.saveAdminOverrides(doc.id, overrides);
+      if (!doc.formData) doc.formData = {};
+      doc.formData._adminOverrides = {
+        ...(doc.formData._adminOverrides || {}),
+        ...overrides,
+      };
+
       setSignoffSavedSuccess(true);
       setTimeout(() => setSignoffSavedSuccess(false), 3500);
+      queryClient.invalidateQueries({ queryKey: ["application"] });
       await handleRefreshPdfPreview();
     } catch (err: any) {
       alert("Failed to save verification sign-off: " + (err.message || "Unknown error"));
@@ -1224,12 +1257,24 @@ function ReviewDocumentModal({
 
               {showEmployerVerification && (
                 <div className="space-y-4 pt-2 border-t border-blue-200/60">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-foreground">First Day of Employment (Hire Date)</label>
+                      <label className="text-xs font-semibold text-foreground">
+                        First Day of Employment (Hire Date) <span className="text-destructive">*</span>
+                      </label>
                       <DatePicker
                         value={i9EmployerData.firstDayOfEmployment}
                         onChange={(val) => setI9EmployerData({ ...i9EmployerData, firstDayOfEmployment: val })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">
+                        Certification Date (Today's Date) <span className="text-destructive">*</span>
+                      </label>
+                      <DatePicker
+                        value={i9EmployerData.employerSignDate}
+                        onChange={(val) => setI9EmployerData({ ...i9EmployerData, employerSignDate: val })}
                         className="mt-1"
                       />
                     </div>
@@ -1249,10 +1294,10 @@ function ReviewDocumentModal({
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     {/* List A */}
                     <div className="p-3 bg-background border rounded-lg space-y-2">
-                      <span className="text-xs font-bold text-foreground block">List A (Both Identity & Auth)</span>
+                      <span className="text-xs font-bold text-foreground block">List A (Both Identity & Auth) - Doc 1</span>
                       <input
                         type="text"
-                        placeholder="Doc Title (e.g. US Passport)"
+                        placeholder="Doc Title 1 (e.g. Foreign Passport)"
                         value={i9EmployerData.listA_title}
                         onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA_title: e.target.value })}
                         className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
@@ -1276,6 +1321,88 @@ function ReviewDocumentModal({
                         onChange={(val) => setI9EmployerData({ ...i9EmployerData, listA_expiration: val })}
                         placeholder="Expiration Date"
                       />
+
+                      {/* List A Document 2 (if any) */}
+                      {!showListA2 && !i9EmployerData.listA2_title ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowListA2(true)}
+                          className="text-[11px] text-blue-600 hover:underline font-semibold block pt-1"
+                        >
+                          + Add Document Title 2 (e.g. Form I-94)
+                        </button>
+                      ) : (
+                        <div className="pt-2 border-t space-y-2">
+                          <span className="text-[11px] font-bold text-foreground block">List A - Document 2 (if any)</span>
+                          <input
+                            type="text"
+                            placeholder="Doc Title 2 (e.g. Form I-94)"
+                            value={i9EmployerData.listA2_title}
+                            onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA2_title: e.target.value })}
+                            className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Issuing Authority 2"
+                            value={i9EmployerData.listA2_issuing}
+                            onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA2_issuing: e.target.value })}
+                            className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Document # 2"
+                            value={i9EmployerData.listA2_number}
+                            onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA2_number: e.target.value })}
+                            className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                          />
+                          <DatePicker
+                            value={i9EmployerData.listA2_expiration}
+                            onChange={(val) => setI9EmployerData({ ...i9EmployerData, listA2_expiration: val })}
+                            placeholder="Expiration Date 2"
+                          />
+                        </div>
+                      )}
+
+                      {/* List A Document 3 (if any) */}
+                      {!showListA3 && !i9EmployerData.listA3_title ? (
+                        <button
+                          type="button"
+                          onClick={() => setShowListA3(true)}
+                          className="text-[11px] text-blue-600 hover:underline font-semibold block pt-1"
+                        >
+                          + Add Document Title 3 (e.g. Form I-20 / DS-2019)
+                        </button>
+                      ) : (
+                        <div className="pt-2 border-t space-y-2">
+                          <span className="text-[11px] font-bold text-foreground block">List A - Document 3 (if any)</span>
+                          <input
+                            type="text"
+                            placeholder="Doc Title 3 (e.g. Form I-20 / DS-2019)"
+                            value={i9EmployerData.listA3_title}
+                            onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA3_title: e.target.value })}
+                            className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Issuing Authority 3"
+                            value={i9EmployerData.listA3_issuing}
+                            onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA3_issuing: e.target.value })}
+                            className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Document # 3"
+                            value={i9EmployerData.listA3_number}
+                            onChange={(e) => setI9EmployerData({ ...i9EmployerData, listA3_number: e.target.value })}
+                            className="w-full border rounded p-1.5 text-xs bg-background text-foreground"
+                          />
+                          <DatePicker
+                            value={i9EmployerData.listA3_expiration}
+                            onChange={(val) => setI9EmployerData({ ...i9EmployerData, listA3_expiration: val })}
+                            placeholder="Expiration Date 3"
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* List B */}
@@ -1341,6 +1468,44 @@ function ReviewDocumentModal({
                     </div>
                   </div>
 
+                  {/* Additional Information & Remote Alternative Procedure */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-foreground block">
+                      Additional Information (Reverification notes, E-Verify Case #, TPS, Cap-Gap, etc.)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={i9EmployerData.additionalInformation}
+                      onChange={(e) => setI9EmployerData({ ...i9EmployerData, additionalInformation: e.target.value })}
+                      className="w-full border rounded-lg p-2 text-xs bg-background text-foreground"
+                      placeholder="Optional notes to appear in the Section 2 Additional Information box"
+                    />
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer pt-1">
+                      <input
+                        type="checkbox"
+                        checked={i9EmployerData.altProcedure}
+                        onChange={(e) => setI9EmployerData({ ...i9EmployerData, altProcedure: e.target.checked })}
+                        className="rounded text-primary focus:ring-primary w-4 h-4"
+                      />
+                      <span>Check if examined documents under DHS-authorized Alternative Procedure (remote inspection)</span>
+                    </label>
+                  </div>
+
+                  {/* HR / Employer Digital Signature */}
+                  <div className="pt-2">
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Employer / Authorized Representative Signature <span className="text-destructive">*</span>
+                      <span className="text-[11px] font-normal text-muted-foreground ml-1.5">
+                        (Draw your signature; it will be officially stamped onto Section 2 of Form I-9)
+                      </span>
+                    </label>
+                    <SignaturePad
+                      value={i9EmployerData.employerSignature}
+                      onChange={(sig) => setI9EmployerData({ ...i9EmployerData, employerSignature: sig || "" })}
+                      storageKey="reliant_hr_signature"
+                    />
+                  </div>
+
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex items-center gap-2">
                       <button
@@ -1350,7 +1515,7 @@ function ReviewDocumentModal({
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
                       >
                         {savingSignoff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                        Save Section 2 Details
+                        Save Section 2 Details & Signature
                       </button>
                       <button
                         type="button"
