@@ -19,6 +19,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const resolveMediaUrl = (url?: string | null) => {
   if (!url || typeof url !== "string") return "";
   if (url.startsWith("data:")) return url;
+  if (url.includes("/upload/view")) return url;
 
   // Cloud storage / DigitalOcean Spaces files route through backend proxy for streaming & auth
   if (url.includes("digitaloceanspaces.com") || url.startsWith("/uploads/") || url.startsWith("uploads/")) {
@@ -618,7 +619,7 @@ function ReviewDocumentModal({
     setIsPending(true);
     try {
       if (status === "APPROVED") {
-        const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+        const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : isChildAbuse ? cyAdminData : undefined;
         await onApprove(adminNotes, expirationDate || undefined, overrides);
       } else {
         await onReject(adminNotes);
@@ -632,6 +633,7 @@ function ReviewDocumentModal({
 
   const isI9 = (doc.section?.name || "").toLowerCase().includes("i-9") || doc.section?.code === "I9";
   const isRef = (doc.section?.name || "").toLowerCase().includes("reference") || doc.section?.code === "REF";
+  const isChildAbuse = (doc.section?.name || "").toLowerCase().includes("child abuse") || doc.section?.code === "CY113";
   const initialOverrides = doc.formData?._adminOverrides || {};
   const savedHrSig = typeof window !== "undefined" ? localStorage.getItem("reliant_hr_signature") || "" : "";
 
@@ -646,8 +648,24 @@ function ReviewDocumentModal({
   const [showEmployerVerification, setShowEmployerVerification] = useState(hasExistingI9Overrides);
   const [showListA2, setShowListA2] = useState(!!initialOverrides.listA2_title);
   const [showListA3, setShowListA3] = useState(!!initialOverrides.listA3_title);
+
+  const hasExistingChildAbuseOverrides = !!(
+    initialOverrides.repName ||
+    initialOverrides.repTitle ||
+    initialOverrides.signDate ||
+    initialOverrides.hrSignature
+  );
+  const [showChildAbuseAttestation, setShowChildAbuseAttestation] = useState(hasExistingChildAbuseOverrides);
+
   const [savingSignoff, setSavingSignoff] = useState(false);
   const [signoffSavedSuccess, setSignoffSavedSuccess] = useState(false);
+
+  const [cyAdminData, setCyAdminData] = useState(() => ({
+    repName: initialOverrides.repName || "Megan Smith",
+    repTitle: initialOverrides.repTitle || "HR Administrator",
+    signDate: initialOverrides.signDate || new Date().toISOString().split("T")[0],
+    hrSignature: initialOverrides.hrSignature || savedHrSig || "",
+  }));
 
   const [i9EmployerData, setI9EmployerData] = useState(() => ({
     listA_title: initialOverrides.listA_title || "",
@@ -700,8 +718,8 @@ function ReviewDocumentModal({
     setSavingSignoff(true);
     setSignoffSavedSuccess(false);
     try {
-      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : {};
-      const hrSig = isI9 ? i9EmployerData.employerSignature : isRef ? refAdminData.hrSignature : "";
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : isChildAbuse ? cyAdminData : {};
+      const hrSig = isI9 ? i9EmployerData.employerSignature : isRef ? refAdminData.hrSignature : isChildAbuse ? cyAdminData.hrSignature : "";
       if (hrSig && typeof window !== "undefined") {
         localStorage.setItem("reliant_hr_signature", hrSig);
       }
@@ -737,7 +755,7 @@ function ReviewDocumentModal({
     if (modalTab === "preview" && isWebForm && isSubmitted) {
       setLoadingPdf(true);
       setPdfError(null);
-      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : isChildAbuse ? cyAdminData : undefined;
       applicationsApi.getOfficialPdfBlobUrl(doc.id, overrides)
         .then((blobUrl) => {
           if (active) {
@@ -769,7 +787,7 @@ function ReviewDocumentModal({
     setLoadingPdf(true);
     setPdfError(null);
     try {
-      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : isChildAbuse ? cyAdminData : undefined;
       const url = await applicationsApi.getOfficialPdfBlobUrl(doc.id, overrides);
       setPdfBlobUrl(url);
     } catch (err: any) {
@@ -783,7 +801,7 @@ function ReviewDocumentModal({
     setDownloadingOfficialPdf(true);
     try {
       const cleanName = `${(doc.section?.name || 'official-document').toLowerCase().replace(/[^a-z0-9]+/g, '-')}-signed.pdf`;
-      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : undefined;
+      const overrides = isI9 ? i9EmployerData : isRef ? refAdminData : isChildAbuse ? cyAdminData : undefined;
       await applicationsApi.downloadOfficialPdf(doc.id, cleanName, overrides);
     } catch (err) {
       console.warn("Could not download official PDF, falling back to printable view", err);
@@ -1011,7 +1029,7 @@ function ReviewDocumentModal({
               <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 {isWebForm ? (modalTab === "preview" ? "Live Official Form Document Preview" : "Form Submission Data") : "Uploaded Document Preview"}
               </h3>
-              {isWebForm && modalTab === "preview" && (isI9 || isRef) && (
+              {isWebForm && modalTab === "preview" && (isI9 || isRef || isChildAbuse) && (
                 <button
                   type="button"
                   onClick={handleRefreshPdfPreview}
@@ -1803,6 +1821,118 @@ function ReviewDocumentModal({
                       <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                         <CheckCircle2 className="w-4 h-4" />
                         Verification saved & preview updated!
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* PA Child Abuse CY 999 Section 2: Agency / Organization Representative Attestation */}
+          {isChildAbuse && (
+            <div className="border border-purple-200 bg-purple-50/60 dark:bg-purple-950/20 rounded-xl p-4 space-y-3">
+              <div
+                className="flex items-center justify-between cursor-pointer select-none"
+                onClick={() => setShowChildAbuseAttestation(!showChildAbuseAttestation)}
+              >
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-purple-900 dark:text-purple-300">
+                    Form CY 999 Section 2: Agency / Organization Representative Attestation
+                  </span>
+                  {hasExistingChildAbuseOverrides && (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-bold px-1.5 py-0.5 rounded">
+                      Saved
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="text-xs font-semibold text-purple-700 dark:text-purple-300 hover:underline inline-flex items-center gap-1"
+                >
+                  {showChildAbuseAttestation ? "Collapse" : "Edit / Sign Attestation"}
+                </button>
+              </div>
+
+              {showChildAbuseAttestation && (
+                <div className="pt-2 space-y-4 border-t border-purple-200/60">
+                  <p className="text-xs text-muted-foreground">
+                    As an authorized representative of Reliant Home Health Agency, Inc., fill and sign Section 2 of Form CY 999. This will be officially stamped and embedded onto the Pennsylvania Child Abuse Consent & Release document.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">Agency Representative Name (Printed)</label>
+                      <input
+                        type="text"
+                        value={cyAdminData.repName}
+                        onChange={(e) => setCyAdminData({ ...cyAdminData, repName: e.target.value })}
+                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                        placeholder="e.g. Megan Smith"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">Title</label>
+                      <input
+                        type="text"
+                        value={cyAdminData.repTitle}
+                        onChange={(e) => setCyAdminData({ ...cyAdminData, repTitle: e.target.value })}
+                        className="w-full border rounded-lg p-2 text-xs bg-background text-foreground mt-1"
+                        placeholder="e.g. HR Administrator"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-foreground">Date</label>
+                      <DatePicker
+                        value={cyAdminData.signDate}
+                        onChange={(val) => setCyAdminData({ ...cyAdminData, signDate: val })}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+
+                  {/* HR Digital Signature */}
+                  <div className="pt-1">
+                    <label className="text-xs font-semibold text-foreground block mb-1">
+                      Agency Representative Signature <span className="text-destructive">*</span>
+                      <span className="text-[11px] font-normal text-muted-foreground ml-1.5">
+                        (Digital signature stamped into Section 2 of Form CY 999)
+                      </span>
+                    </label>
+                    <SignaturePad
+                      value={cyAdminData.hrSignature}
+                      onChange={(sig) => setCyAdminData({ ...cyAdminData, hrSignature: sig || "" })}
+                      storageKey="reliant_hr_signature"
+                    />
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleSaveSignoff}
+                        disabled={savingSignoff}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground text-xs font-bold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
+                      >
+                        {savingSignoff ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                        Save Agency Attestation
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleRefreshPdfPreview}
+                        disabled={loadingPdf}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 border text-xs font-semibold rounded-lg hover:bg-muted transition-all disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingPdf ? "animate-spin" : ""}`} />
+                        Update Preview
+                      </button>
+                    </div>
+                    {signoffSavedSuccess && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Attestation saved & preview updated!
                       </span>
                     )}
                   </div>

@@ -24,6 +24,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 const resolveMediaUrl = (url?: string | null) => {
   if (!url || typeof url !== "string") return "";
   if (url.startsWith("data:")) return url;
+  if (url.includes("/upload/view")) return url;
 
   // Cloud storage / DigitalOcean Spaces files route through backend proxy for streaming & auth
   if (url.includes("digitaloceanspaces.com") || url.startsWith("/uploads/") || url.startsWith("uploads/")) {
@@ -3052,10 +3053,20 @@ function WebFormModal({
                                       alt={field.label || "Document preview"}
                                       onError={(e) => {
                                         const target = e.currentTarget;
-                                        if (!target.dataset.triedFallback && valStr && !valStr.startsWith('data:')) {
+                                        if (!target.dataset.triedFallback && valStr && !valStr.startsWith('data:') && !valStr.includes('/upload/view')) {
                                           target.dataset.triedFallback = 'true';
                                           const baseUrl = API_URL.replace(/\/+$/, "");
                                           target.src = `${baseUrl}/upload/view?url=${encodeURIComponent(valStr)}`;
+                                        } else {
+                                          target.style.display = 'none';
+                                          const parent = target.parentElement;
+                                          if (parent && !parent.querySelector('.scan-fallback-icon')) {
+                                            parent.classList.add('flex', 'items-center', 'justify-center', 'bg-emerald-100', 'dark:bg-emerald-950/60');
+                                            const icon = document.createElement('span');
+                                            icon.innerHTML = '📄';
+                                            icon.className = 'scan-fallback-icon text-xl select-none';
+                                            parent.appendChild(icon);
+                                          }
                                         }
                                       }}
                                       className="w-full h-full object-cover"
@@ -3254,6 +3265,7 @@ function ImageLightboxModal({
   onClose: () => void;
 }) {
   const [downloading, setDownloading] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const resolvedUrl = resolveMediaUrl(image.url);
 
   useEffect(() => {
@@ -3339,19 +3351,55 @@ function ImageLightboxModal({
         className="w-full max-w-5xl flex-1 flex items-center justify-center p-2 sm:p-4 min-h-0 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <img
-          src={resolvedUrl}
-          alt={image.title}
-          onError={(e) => {
-            const target = e.currentTarget;
-            if (!target.dataset.triedFallback && image.url && !image.url.startsWith('data:')) {
-              target.dataset.triedFallback = 'true';
-              const baseUrl = API_URL.replace(/\/+$/, "");
-              target.src = `${baseUrl}/upload/view?url=${encodeURIComponent(image.url)}`;
-            }
-          }}
-          className="max-h-full max-w-full object-contain rounded-xl shadow-2xl border border-white/10 select-none"
-        />
+        {imageError ? (
+          <div className="flex flex-col items-center justify-center p-8 bg-card/90 border border-border rounded-2xl max-w-md text-center shadow-2xl space-y-4">
+            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-xs">
+              <FileText className="w-8 h-8" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-foreground">{image.title}</h4>
+              <p className="text-xs text-muted-foreground mt-1.5">
+                The document scan is securely attached. You can download it directly or open it in a new browser tab.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={downloading}
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground text-xs font-bold rounded-xl hover:bg-primary/90 transition-all shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                Download Scan
+              </button>
+              <a
+                href={resolvedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-muted text-foreground text-xs font-semibold rounded-xl hover:bg-muted/80 transition-all border"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open New Tab
+              </a>
+            </div>
+          </div>
+        ) : (
+          <img
+            src={resolvedUrl}
+            alt={image.title}
+            onError={(e) => {
+              const target = e.currentTarget;
+              if (!target.dataset.triedFallback && image.url && !image.url.startsWith('data:') && !image.url.includes('/upload/view')) {
+                target.dataset.triedFallback = 'true';
+                const baseUrl = API_URL.replace(/\/+$/, "");
+                target.src = `${baseUrl}/upload/view?url=${encodeURIComponent(image.url)}`;
+              } else {
+                setImageError(true);
+              }
+            }}
+            className="max-h-full max-w-full object-contain rounded-xl shadow-2xl border border-white/10 select-none"
+          />
+        )}
       </div>
 
       {/* Bottom Hint */}
