@@ -1662,7 +1662,8 @@ function WebFormModal({
       'address_zip', 'zip_code', 'zip',
       'dob', 'date_of_birth', 'gender', 'race',
       'ssn', 'social_security_number',
-      'dl_number', 'driver_license_num', 'dl_state', 'driver_license_state'
+      'dl_number', 'driver_license_num', 'dl_state', 'driver_license_state',
+      'signature'
     ]);
 
     if (Array.isArray(application?.documents)) {
@@ -1882,6 +1883,15 @@ function WebFormModal({
       'PA'
     ).trim();
 
+    const localSig = typeof window !== 'undefined' ? localStorage.getItem('reliant_applicant_signature') : null;
+    const savedSignature = (
+      initial.signature ||
+      candidateIdentity.signature ||
+      application?.personalInfo?.signature ||
+      localSig ||
+      ''
+    ).trim();
+
     const positionApplied = application?.job?.title && application?.job?.title !== 'General Application'
       ? application.job.title
       : (application?.roleType === 'skilled' ? 'Skilled Healthcare Professional' : 'Direct Care Worker / Home Health Aide');
@@ -2063,6 +2073,12 @@ function WebFormModal({
         ) {
           initial[id] = today;
         }
+        // Digital Signature prefill
+        else if (field.type === 'signature') {
+          if (savedSignature) {
+            initial[id] = savedSignature;
+          }
+        }
       }
     });
 
@@ -2072,6 +2088,13 @@ function WebFormModal({
   const submitMutation = useMutation({
     mutationFn: (data: any) => applicationsApi.submitWebForm(applicationId, doc.sectionId, data),
     onSuccess: () => {
+      if (formData.signature && typeof formData.signature === 'string' && formData.signature.startsWith('data:image/')) {
+        try {
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('reliant_applicant_signature', formData.signature);
+          }
+        } catch {}
+      }
       queryClient.invalidateQueries({ queryKey: ["my-applications"] });
       onClose();
     },
@@ -3025,7 +3048,12 @@ function AttestationSignOff({
   courseTitle: string;
   onAttestationComplete: (signatureUrl: string) => Promise<void>;
 }) {
-  const [signature, setSignature] = useState<string | null>(null);
+  const [signature, setSignature] = useState<string | null>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("reliant_applicant_signature") || null;
+    }
+    return null;
+  });
   const [agreed, setAgreed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
