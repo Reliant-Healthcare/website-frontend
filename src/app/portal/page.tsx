@@ -2692,15 +2692,25 @@ function WebFormModal({
 
                 return (
                   <div key={field.id} className="space-y-3 pt-2">
-                    <label className="text-sm font-semibold flex items-center justify-between">
-                      <span>{field.label}</span>
-                      <span className="text-xs text-muted-foreground font-normal">Max 10 members</span>
-                    </label>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-semibold">{field.label}</label>
+                        <span className="text-xs text-muted-foreground font-normal">Max 10 members</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Please list everyone who lived with you at any time since 1975 to present. Use Entry #1 and #2 for parents, guardians, or person(s) who raised you; use Entry #3 and below for other household members (children, spouse, siblings, roommates, etc.).
+                      </p>
+                    </div>
                     <div className="space-y-3">
                       {list.map((item: any, idx: number) => (
                         <div key={idx} className="p-3 bg-muted/40 rounded-xl border border-border/80 space-y-2">
                           <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                            <span>Household Member #{idx + 1}</span>
+                            <span>
+                              Household Member #{idx + 1}
+                              <span className="ml-1.5 font-normal text-[11px] text-muted-foreground/80">
+                                {idx < 2 ? '(Parent / Guardian / Person who raised you)' : '(Child, Spouse, Sibling, Roommate, etc.)'}
+                              </span>
+                            </span>
                             {list.length > 1 && !isReadOnly && (
                               <button
                                 type="button"
