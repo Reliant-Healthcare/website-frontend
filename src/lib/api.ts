@@ -125,16 +125,22 @@ export const applicationsApi = {
     });
   },
 
-  submitWebForm: (applicationId: string, sectionId: string, formData: any) =>
+  submitWebForm: (applicationId: string, sectionId: string, formData: any, isDraft: boolean = false) =>
     apiFetch(`/applications/${applicationId}/documents/${sectionId}/submit-form`, {
       method: 'POST',
-      body: JSON.stringify({ formData }),
+      body: JSON.stringify({ formData, isDraft }),
     }),
 
-  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string) =>
+  updateDocumentStatus: (docId: string, status: 'APPROVED' | 'REJECTED', adminNotes?: string, expirationDate?: string, adminOverrides?: any) =>
     apiFetch(`/applications/documents/${docId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, adminNotes, expirationDate }),
+      body: JSON.stringify({ status, adminNotes, expirationDate, adminOverrides }),
+    }),
+
+  saveAdminOverrides: (docId: string, adminOverrides: any) =>
+    apiFetch(`/applications/documents/${docId}/admin-overrides`, {
+      method: 'PATCH',
+      body: JSON.stringify({ adminOverrides }),
     }),
 
   sendDocumentExpirationReminder: (docId: string) =>
@@ -154,6 +160,51 @@ export const applicationsApi = {
       method: 'POST',
       body: formData,
     });
+  },
+
+  downloadOfficialPdf: async (docId: string, filename = 'official-document.pdf', overrides?: any) => {
+    const token = getToken();
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const res = await fetch(`${API_URL}/applications/documents/${docId}/official-pdf`, {
+      method: overrides ? 'POST' : 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(overrides ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(overrides ? { body: JSON.stringify(overrides) } : {}),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Failed to download official PDF (${res.status}): ${errText}`);
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  },
+
+  getOfficialPdfBlobUrl: async (docId: string, overrides?: any): Promise<string> => {
+    const token = getToken();
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    const res = await fetch(`${API_URL}/applications/documents/${docId}/official-pdf`, {
+      method: overrides ? 'POST' : 'GET',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(overrides ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(overrides ? { body: JSON.stringify(overrides) } : {}),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`Failed to load official PDF (${res.status}): ${errText}`);
+    }
+    const blob = await res.blob();
+    return window.URL.createObjectURL(blob);
   },
 };
 
@@ -403,4 +454,41 @@ export const cmsApi = {
   setSection: (page: string, section: string, data: any) =>
     apiFetch(`/cms/${page}/${section}`, { method: "POST", body: JSON.stringify(data) }),
 };
+
+// ── Candidates & Users 360 API ───────────────────────────────────────────────
+
+export const candidatesApi = {
+  getAll: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    roleType?: string;
+    status?: string;
+    complianceStatus?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) => {
+    const qs = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') qs.append(k, String(v));
+      });
+    }
+    return apiFetch(`/users/candidates${qs.toString() ? `?${qs.toString()}` : ''}`);
+  },
+
+  getById: (id: string) => apiFetch(`/users/candidates/${id}`),
+
+  delete: (id: string, force = false) =>
+    apiFetch(`/users/candidates/${id}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
+
+  bulkAction: (data: {
+    userIds: string[];
+    action: 'status_update' | 'send_reminder' | 'export' | 'delete';
+    payload?: any;
+  }) => apiFetch('/users/candidates/bulk-action', { method: 'POST', body: JSON.stringify(data) }),
+};
+
 

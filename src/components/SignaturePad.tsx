@@ -7,13 +7,23 @@ interface SignaturePadProps {
   value?: string;
   onChange: (value: string | null) => void;
   readOnly?: boolean;
+  storageKey?: string | null;
 }
 
-export default function SignaturePad({ value, onChange, readOnly = false }: SignaturePadProps) {
+export default function SignaturePad({
+  value,
+  onChange,
+  readOnly = false,
+  storageKey = "reliant_applicant_signature",
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(!!value);
+
+  useEffect(() => {
+    setHasSignature(!!value);
+  }, [value]);
 
   // Resize canvas to match display size
   const resizeCanvas = () => {
@@ -22,6 +32,7 @@ export default function SignaturePad({ value, onChange, readOnly = false }: Sign
 
     // Get display size
     const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
     canvas.width = rect.width;
     canvas.height = rect.height;
 
@@ -55,6 +66,11 @@ export default function SignaturePad({ value, onChange, readOnly = false }: Sign
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // If replacing an existing prefilled signature, clear canvas before fresh strokes
+    if (value && !isDrawing) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
     const rect = canvas.getBoundingClientRect();
     ctx.beginPath();
     ctx.moveTo(clientX - rect.left, clientY - rect.top);
@@ -85,6 +101,11 @@ export default function SignaturePad({ value, onChange, readOnly = false }: Sign
     if (canvas && hasSignature) {
       const dataUrl = canvas.toDataURL("image/png");
       onChange(dataUrl);
+      try {
+        if (typeof window !== "undefined" && storageKey) {
+          localStorage.setItem(storageKey, dataUrl);
+        }
+      } catch {}
     }
   };
 
@@ -94,9 +115,9 @@ export default function SignaturePad({ value, onChange, readOnly = false }: Sign
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
     setHasSignature(false);
     onChange(null);
   };
@@ -136,22 +157,37 @@ export default function SignaturePad({ value, onChange, readOnly = false }: Sign
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={stopDrawing}
-          className="absolute inset-0 w-full h-full cursor-crosshair"
+          className="absolute inset-0 w-full h-full cursor-crosshair z-10"
         />
+        {/* If prefilled / existing signature exists and not actively drawing new strokes, show the signature image */}
+        {hasSignature && value && !isDrawing && (
+          <div className="absolute inset-0 flex items-center justify-center p-3 pointer-events-none z-0">
+            <img src={value} alt="Current Signature" className="max-h-[110px] max-w-[90%] object-contain select-none" />
+          </div>
+        )}
         {!hasSignature && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs text-muted-foreground/60 font-medium select-none">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs text-muted-foreground/60 font-medium select-none z-0">
             Sign here with mouse or finger
           </div>
         )}
       </div>
       {hasSignature && (
-        <button
-          type="button"
-          onClick={clear}
-          className="inline-flex items-center gap-1 text-xs font-bold text-destructive hover:underline"
-        >
-          <RotateCcw className="w-3.5 h-3.5" /> Clear Signature
-        </button>
+        <div className="flex items-center justify-between text-xs pt-0.5">
+          {value ? (
+            <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+              ✓ Signature captured (will apply to this form)
+            </span>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            onClick={clear}
+            className="inline-flex items-center gap-1 text-xs font-bold text-destructive hover:underline ml-auto"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Clear / Re-sign
+          </button>
+        </div>
       )}
     </div>
   );
